@@ -251,7 +251,7 @@ Clear app storage (reset to fresh install state).
 
 - Ensure `adb` and `xcrun` are in your PATH or set `ADB_PATH` / `XCRUN_PATH` accordingly.
 - For iOS, the simulator must be booted before using tools.
-- Screenshot tool (`capture_screenshot`) returns a base64-encoded PNG image in the `screenshot` field, which some MCP clients can display directly.
+- The `capture_screenshot` tool returns a multi-block response: a JSON text block with metadata, followed by an image block containing the base64-encoded PNG data.
 
 ---
 

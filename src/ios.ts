@@ -1,4 +1,4 @@
-import { execFile } from "child_process"
+import { execFile, spawn } from "child_process"
 import { promises as fs } from "fs"
 import { pathToFileURL } from "url"
 import { StartAppResponse, GetLogsResponse, GetCrashResponse, CaptureIOSScreenshotResponse, TerminateAppResponse, RestartAppResponse, ResetAppDataResponse, DeviceInfo } from "./types.js"
@@ -10,15 +10,53 @@ interface IOSResult {
   device: DeviceInfo
 }
 
+// Validate bundle ID to prevent any potential injection or invalid characters
+function validateBundleId(bundleId: string) {
+  if (!bundleId) return
+  // Allow alphanumeric, dots, hyphens, and underscores.
+  if (!/^[a-zA-Z0-9.\-_]+$/.test(bundleId)) {
+    throw new Error(`Invalid Bundle ID: ${bundleId}. Must contain only alphanumeric characters, dots, hyphens, or underscores.`)
+  }
+}
+
 function execCommand(args: string[], deviceId: string = "booted"): Promise<IOSResult> {
   return new Promise((resolve, reject) => {
-    execFile(XCRUN, args, (err, stdout, stderr) => {
-      if (err) {
-        // Reject with a real Error object containing the stderr message
-        reject(new Error(stderr.trim() || err.message))
+    // Use spawn for better stream control and consistency with Android implementation
+    const child = spawn(XCRUN, args)
+    
+    let stdout = ''
+    let stderr = ''
+
+    if (child.stdout) {
+      child.stdout.on('data', (data) => {
+        stdout += data.toString()
+      })
+    }
+
+    if (child.stderr) {
+      child.stderr.on('data', (data) => {
+        stderr += data.toString()
+      })
+    }
+
+    const timeoutMs = args.includes('log') ? 10000 : 5000 // 10s for logs, 5s for others
+    const timeout = setTimeout(() => {
+      child.kill()
+      reject(new Error(`Command timed out after ${timeoutMs}ms: ${XCRUN} ${args.join(' ')}`))
+    }, timeoutMs)
+
+    child.on('close', (code) => {
+      clearTimeout(timeout)
+      if (code !== 0) {
+        reject(new Error(stderr.trim() || `Command failed with code ${code}`))
       } else {
         resolve({ output: stdout.trim(), device: { platform: "ios", id: deviceId } as DeviceInfo })
       }
+    })
+
+    child.on('error', (err) => {
+      clearTimeout(timeout)
+      reject(err)
     })
   })
 }
@@ -85,6 +123,7 @@ export async function getIOSDeviceMetadata(deviceId: string = "booted"): Promise
 }
 
 export async function startIOSApp(bundleId: string, deviceId: string = "booted"): Promise<StartAppResponse> {
+  validateBundleId(bundleId)
   const result = await execCommand(['simctl', 'launch', deviceId, bundleId], deviceId)
   const device = await getIOSDeviceMetadata(deviceId)
   // Simulate launch time and appStarted for demonstration
@@ -96,6 +135,7 @@ export async function startIOSApp(bundleId: string, deviceId: string = "booted")
 }
 
 export async function terminateIOSApp(bundleId: string, deviceId: string = "booted"): Promise<TerminateAppResponse> {
+  validateBundleId(bundleId)
   await execCommand(['simctl', 'terminate', deviceId, bundleId], deviceId)
   const device = await getIOSDeviceMetadata(deviceId)
   return {
@@ -105,6 +145,7 @@ export async function terminateIOSApp(bundleId: string, deviceId: string = "boot
 }
 
 export async function restartIOSApp(bundleId: string, deviceId: string = "booted"): Promise<RestartAppResponse> {
+  // terminateIOSApp already validates bundleId
   await terminateIOSApp(bundleId, deviceId)
   const startResult = await startIOSApp(bundleId, deviceId)
   return {
@@ -115,6 +156,7 @@ export async function restartIOSApp(bundleId: string, deviceId: string = "booted
 }
 
 export async function resetIOSAppData(bundleId: string, deviceId: string = "booted"): Promise<ResetAppDataResponse> {
+  validateBundleId(bundleId)
   await terminateIOSApp(bundleId, deviceId)
   const device = await getIOSDeviceMetadata(deviceId)
   
@@ -156,6 +198,7 @@ export async function getIOSLogs(appId?: string, deviceId: string = "booted"): P
   // but we do need to construct the predicate correctly for log show.
   const args = ['simctl', 'spawn', deviceId, 'log', 'show', '--style', 'syslog', '--last', '1m']
   if (appId) {
+    validateBundleId(appId)
     args.push('--predicate', `subsystem contains "${appId}" or process == "${appId}"`)
   }
   
