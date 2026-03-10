@@ -11,10 +11,11 @@ import {
   DeviceInfo,
   TerminateAppResponse,
   RestartAppResponse,
-  ResetAppDataResponse
+  ResetAppDataResponse,
+  GetUITreeResponse
 } from "./types.js"
 
-import { startAndroidApp, getAndroidLogs, captureAndroidScreen, getAndroidDeviceMetadata, terminateAndroidApp, restartAndroidApp, resetAndroidAppData } from "./android.js"
+import { startAndroidApp, getAndroidLogs, captureAndroidScreen, getAndroidDeviceMetadata, terminateAndroidApp, restartAndroidApp, resetAndroidAppData, getAndroidUITree } from "./android.js"
 import { startIOSApp, getIOSLogs, captureIOSScreenshot, getIOSDeviceMetadata, terminateIOSApp, restartIOSApp, resetIOSAppData } from "./ios.js"
 
 const server = new Server(
@@ -167,6 +168,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           deviceId: {
             type: "string",
             description: "Device UDID (iOS) or Serial (Android). Defaults to booted/connected."
+          }
+        },
+        required: ["platform"]
+      }
+    },
+    {
+      name: "get_ui_tree",
+      description: "Get the current UI hierarchy from an Android device. Returns a structured JSON representation of the screen content.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          platform: {
+            type: "string",
+            enum: ["android"],
+            description: "Currently only supports Android"
+          },
+          deviceId: {
+            type: "string",
+            description: "Device Serial (Android). Defaults to connected device."
           }
         },
         required: ["platform"]
@@ -381,6 +401,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }
         ]
       }
+    }
+
+    if (name === "get_ui_tree") {
+      const { platform, deviceId } = args as { platform: "android", deviceId?: string }
+      
+      if (platform !== "android") {
+        throw new Error("get_ui_tree is only supported for Android")
+      }
+
+      const result = await getAndroidUITree(deviceId)
+      return wrapResponse(result)
     }
   } catch (error) {
     return {

@@ -56,3 +56,27 @@ export interface CaptureIOSScreenshotResponse {
     height: number;
   };
 }
+
+export interface UIElement {
+  text: string | null;
+  contentDescription: string | null;
+  type: string;
+  clickable: boolean;
+  enabled: boolean;
+  visible: boolean;
+  bounds: [number, number, number, number];
+  resourceId: string | null;
+  parentId?: number;
+  children?: number[];
+}
+
+export interface GetUITreeResponse {
+  device: DeviceInfo;
+  screen: string;
+  resolution: {
+    width: number;
+    height: number;
+  };
+  elements: UIElement[];
+  error?: string;
+}
