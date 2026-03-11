@@ -6,7 +6,8 @@
     "rootDir": "src",
     "moduleResolution": "NodeNext",
     "strict": true,
+    "skipLibCheck": true,
     "esModuleInterop": true
   },
-  "exclude": ["smoke-test.ts"]
+  "exclude": ["smoke-test.ts", "test-ui-tree.ts"]
 }

@@ -26,6 +26,7 @@ This server is designed with security in mind, using strict argument handling to
 - Node.js >= 18
 - Android SDK (`adb` in PATH) for Android support
 - Xcode command-line tools (`xcrun simctl`) for iOS support
+- **iOS Device Bridge (`idb`)** for iOS UI tree support
 - Booted iOS simulator for iOS testing
 
 ---
@@ -34,7 +35,18 @@ This server is designed with security in mind, using strict argument handling to
 
 You can install and use **Mobile Debug MCP** in one of two ways:
 
-### 1. Clone the repository for local development
+### 1. Install Dependencies
+
+**iOS Prerequisite (`idb`):**
+To use the `get_ui_tree` tool on iOS, you must install Facebook's `idb`:
+
+```bash
+brew tap facebook/fb
+brew install idb-companion
+pip3 install fb-idb
+```
+
+### 2. Clone the repository for local development
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/mobile-debug-mcp.git
@@ -45,7 +57,7 @@ npm run build
 
 This option is suitable if you want to modify or contribute to the code.
 
-### 2. Install via npm for standard use
+### 3. Install via npm for standard use
 
 ```bash
 npm install -g mobile-debug-mcp
@@ -55,27 +67,7 @@ This option installs the package globally for easy use without cloning the repo.
 
 ---
 
-## Testing
-33. 
-34. The repository includes a smoke test script to verify end-to-end functionality on real devices or simulators.
-35. 
-36. ```bash
-37. # Run smoke test for Android
-38. npx tsx smoke-test.ts android com.example.package
-39. 
-40. # Run smoke test for iOS
-41. npx tsx smoke-test.ts ios com.example.bundleid
-42. ```
-43. 
-44. The smoke test performs the following sequence:
-45. 1. Starts the app
-46. 2. Captures a screenshot
-47. 3. Fetches logs
-48. 4. Terminates the app
-49. 
-50. ---
-51. 
-52. ## MCP Server Configuration
+## MCP Server Configuration
 
 Example WebUI MCP config using `npx --yes` and environment variables:
 
@@ -110,7 +102,7 @@ All tools accept a JSON input payload and return a structured JSON response. **E
 Launch a mobile app.
 
 **Input:**
-```json
+```jsonc
 {
   "platform": "android" | "ios",
   "appId": "com.example.app", // Android package or iOS bundle ID (Required)
@@ -131,7 +123,7 @@ Launch a mobile app.
 Fetch recent logs from the app or device.
 
 **Input:**
-```json
+```jsonc
 {
   "platform": "android" | "ios",
   "appId": "com.example.app", // Optional: filter logs by app
@@ -155,7 +147,7 @@ Returns two content blocks:
 Capture a screenshot of the current device screen.
 
 **Input:**
-```json
+```jsonc
 {
   "platform": "android" | "ios",
   "deviceId": "emulator-5554" // Optional: target specific device
@@ -177,7 +169,7 @@ Returns two content blocks:
 Terminate a running app.
 
 **Input:**
-```json
+```jsonc
 {
   "platform": "android" | "ios",
   "appId": "com.example.app", // Android package or iOS bundle ID (Required)
@@ -197,7 +189,7 @@ Terminate a running app.
 Restart an app (terminate then launch).
 
 **Input:**
-```json
+```jsonc
 {
   "platform": "android" | "ios",
   "appId": "com.example.app", // Android package or iOS bundle ID (Required)
@@ -218,7 +210,7 @@ Restart an app (terminate then launch).
 Clear app storage (reset to fresh install state).
 
 **Input:**
-```json
+```jsonc
 {
   "platform": "android" | "ios",
   "appId": "com.example.app", // Android package or iOS bundle ID (Required)
@@ -231,6 +223,42 @@ Clear app storage (reset to fresh install state).
 {
   "device": { /* device info */ },
   "dataCleared": true
+}
+```
+
+### get_ui_tree
+Get the current UI hierarchy from the device. Returns a structured JSON representation of the screen content.
+
+**Input:**
+```jsonc
+{
+  "platform": "android" | "ios",
+  "deviceId": "emulator-5554" // Optional
+}
+```
+
+**Response:**
+```json
+{
+  "device": { /* device info */ },
+  "screen": "",
+  "resolution": { "width": 1080, "height": 1920 },
+  "elements": [
+    {
+      "text": "Login",
+      "contentDescription": null,
+      "type": "android.widget.Button",
+      "resourceId": "com.example:id/login_button",
+      "clickable": true,
+      "enabled": true,
+      "visible": true,
+      "bounds": [120,400,280,450],
+      "center": [200, 425],
+      "depth": 1,
+      "parentId": 0,
+      "children": []
+    }
+  ]
 }
 ```
 
@@ -252,6 +280,26 @@ Clear app storage (reset to fresh install state).
 - Ensure `adb` and `xcrun` are in your PATH or set `ADB_PATH` / `XCRUN_PATH` accordingly.
 - For iOS, the simulator must be booted before using tools.
 - The `capture_screenshot` tool returns a multi-block response: a JSON text block with metadata, followed by an image block containing the base64-encoded PNG data.
+
+---
+
+## Testing
+
+The repository includes a smoke test script to verify end-to-end functionality on real devices or simulators.
+
+```bash
+# Run smoke test for Android
+npx tsx smoke-test.ts android com.example.package
+
+# Run smoke test for iOS
+npx tsx smoke-test.ts ios com.example.bundleid
+```
+
+The smoke test performs the following sequence:
+1. Starts the app
+2. Captures a screenshot
+3. Fetches logs
+4. Terminates the app
 
 ---
 
