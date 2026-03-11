@@ -12,7 +12,8 @@ import {
   TerminateAppResponse,
   RestartAppResponse,
   ResetAppDataResponse,
-  GetUITreeResponse
+  GetUITreeResponse,
+  GetCurrentScreenResponse
 } from "./types.js"
 
 import { AndroidObserve } from "./android/observe.js"
@@ -28,7 +29,7 @@ const iosInteract = new iOSInteract()
 const server = new Server(
   {
     name: "mobile-debug-mcp",
-    version: "0.4.0"
+    version: "0.6.0"
   },
   {
     capabilities: {
@@ -197,6 +198,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           }
         },
         required: ["platform"]
+      }
+    },
+    {
+      name: "get_current_screen",
+      description: "Get the currently visible activity on an Android device. Returns package and activity name.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          deviceId: {
+            type: "string",
+            description: "Device Serial (Android). Defaults to connected/booted device."
+          }
+        }
       }
     }
   ]
@@ -422,6 +436,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error(`Platform ${platform} not supported for get_ui_tree`)
       }
 
+      return wrapResponse(result)
+    }
+
+    if (name === "get_current_screen") {
+      const { deviceId } = args as { deviceId?: string }
+      const result = await androidObserve.getCurrentScreen(deviceId)
       return wrapResponse(result)
     }
   } catch (error) {
