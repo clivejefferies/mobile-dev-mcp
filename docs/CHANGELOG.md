@@ -2,9 +2,10 @@
 
 All notable changes to the **Mobile Debug MCP** project will be documented in this file.
 
-## [0.6.0] - 2026-03-11
+## [0.7.0] - 2026-03-11
 
 ### Added
+- **`wait_for_element` tool**: Added ability to wait for a specific UI element to appear on screen. Polls `get_ui_tree` until timeout. Useful for waiting on app transitions or loading states.
 - **`get_current_screen` tool**: Added ability to determine the currently visible activity on an Android device using `dumpsys activity activities`. Includes robust regex parsing to handle various Android versions.
 
 ## [0.4.0] - 2026-03-09

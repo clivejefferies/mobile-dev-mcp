@@ -13,7 +13,8 @@ import {
   RestartAppResponse,
   ResetAppDataResponse,
   GetUITreeResponse,
-  GetCurrentScreenResponse
+  GetCurrentScreenResponse,
+  WaitForElementResponse
 } from "./types.js"
 
 import { AndroidObserve } from "./android/observe.js"
@@ -29,7 +30,7 @@ const iosInteract = new iOSInteract()
 const server = new Server(
   {
     name: "mobile-debug-mcp",
-    version: "0.6.0"
+    version: "0.7.0"
   },
   {
     capabilities: {
@@ -211,6 +212,33 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             description: "Device Serial (Android). Defaults to connected/booted device."
           }
         }
+      }
+    },
+    {
+      name: "wait_for_element",
+      description: "Wait until a UI element with matching text appears on screen or timeout is reached.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          platform: {
+            type: "string",
+            enum: ["android", "ios"],
+            description: "Platform to check"
+          },
+          text: {
+            type: "string",
+            description: "Text content of the element to wait for"
+          },
+          timeout: {
+            type: "number",
+            description: "Max wait time in ms (default 10000)"
+          },
+          deviceId: {
+            type: "string",
+            description: "Device Serial/UDID. Defaults to connected/booted device."
+          }
+        },
+        required: ["platform", "text", "timeout"]
       }
     }
   ]
@@ -442,6 +470,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name === "get_current_screen") {
       const { deviceId } = (args || {}) as { deviceId?: string }
       const result = await androidObserve.getCurrentScreen(deviceId)
+      return wrapResponse(result)
+    }
+
+    if (name === "wait_for_element") {
+      const { platform, text, timeout, deviceId } = args as {
+        platform: "android" | "ios"
+        text: string
+        timeout: number
+        deviceId?: string
+      }
+      
+      let result: WaitForElementResponse;
+      if (platform === "android") {
+        result = await androidInteract.waitForElement(text, timeout, deviceId)
+      } else {
+        result = await iosInteract.waitForElement(text, timeout, deviceId)
+      }
       return wrapResponse(result)
     }
   } catch (error) {

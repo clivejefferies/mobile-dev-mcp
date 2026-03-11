@@ -282,6 +282,27 @@ Get the currently visible activity on an Android device.
 }
 ```
 
+### wait_for_element
+Wait until a UI element with matching text appears on screen or timeout is reached. Useful for handling loading states or transitions.
+
+**Input:**
+```jsonc
+{
+  "platform": "android" | "ios",
+  "text": "Home", // Text to wait for
+  "timeout": 5000, // Max wait time in ms (default 10000)
+  "deviceId": "emulator-5554" // Optional
+}
+```
+
+**Response:**
+```json
+{
+  "found": true,
+  "element": { /* UIElement object if found */ }
+}
+```
+
 ---
 
 ## Recommended Workflow
@@ -290,8 +311,9 @@ Get the currently visible activity on an Android device.
 2. Use `start_app` to launch the app.
 3. Use `get_logs` to read the latest logs.
 4. Use `capture_screenshot` to visually inspect the app if needed.
-5. Use `reset_app_data` to clear state if debugging fresh install scenarios.
-6. Use `restart_app` to quickly reboot the app during development cycles.
+5. Use `wait_for_element` to ensure the app is in the expected state before proceeding (e.g., after login).
+6. Use `reset_app_data` to clear state if debugging fresh install scenarios.
+7. Use `restart_app` to quickly reboot the app during development cycles.
 
 ---
 
