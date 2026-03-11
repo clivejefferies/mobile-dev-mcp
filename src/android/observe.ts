@@ -1,6 +1,6 @@
 import { spawn } from "child_process"
 import { XMLParser } from "fast-xml-parser"
-import { GetLogsResponse, CaptureAndroidScreenResponse, GetUITreeResponse, UIElement, DeviceInfo } from "../types.js"
+import { GetLogsResponse, CaptureAndroidScreenResponse, GetUITreeResponse, GetCurrentScreenResponse, UIElement, DeviceInfo } from "../types.js"
 import { ADB, execAdb, getAndroidDeviceMetadata, getDeviceInfo } from "./utils.js"
 
 // --- Helper Functions Specific to Observe ---
@@ -284,5 +284,77 @@ export class AndroidObserve {
         reject(err)
       })
     })
+  }
+
+  async getCurrentScreen(deviceId?: string): Promise<GetCurrentScreenResponse> {
+    const metadata = await getAndroidDeviceMetadata("", deviceId)
+    const deviceInfo = getDeviceInfo(deviceId || 'default', metadata)
+
+    try {
+      // Dumpsys activity can be slow on some devices, so we increase timeout to 10s
+      const output = await execAdb(['shell', 'dumpsys', 'activity', 'activities'], deviceId, { timeout: 10000 })
+      
+      // Find the line with mResumedActivity or ResumedActivity (some versions might differ)
+      const lines = output.split('\n');
+      // Prioritize mResumedActivity, then ResumedActivity. 
+      // Use strict regex match to ensure it starts with the key, avoiding false positives like 'mLastResumedActivity'.
+      let resumedLine = lines.find(line => /^\s*mResumedActivity:/.test(line));
+      
+      if (!resumedLine) {
+        resumedLine = lines.find(line => /^\s*ResumedActivity:/.test(line));
+      }
+
+      if (!resumedLine) {
+         return {
+            device: deviceInfo,
+            package: "",
+            activity: "",
+            shortActivity: "",
+            error: "Could not find 'mResumedActivity' in dumpsys output"
+         }
+      }
+
+      // Regex to parse the line: ActivityRecord{... package/activity ...}
+      // Matches: ActivityRecord{<hex> <user> <package>/<activity> ...}
+      // We want to capture the component "package/activity" which is separated by space from other tokens.
+      // We use greedy match ([^ \{}]+) for activity to ensure we get the full name until a space or closing brace.
+      const match = resumedLine.match(/ActivityRecord\{[^ ]*(?:\s+[^ ]+)*\s+([^\/ ]+)\/([^ \{}]+)[^}]*\}/);
+
+      if (match) {
+        const packageName = match[1];
+        let activityName = match[2];
+        
+        // Handle relative activity names (e.g. .LoginActivity)
+        if (activityName.startsWith('.')) {
+          activityName = packageName + activityName;
+        }
+        
+        const shortActivity = activityName.split('.').pop() || activityName;
+
+        return {
+          device: deviceInfo,
+          package: packageName,
+          activity: activityName,
+          shortActivity: shortActivity
+        };
+      } else {
+         return {
+            device: deviceInfo,
+            package: "",
+            activity: "",
+            shortActivity: "",
+            error: `Found resumed activity line but failed to parse: '${resumedLine.trim()}'`
+         }
+      }
+
+    } catch (e) {
+      return {
+          device: deviceInfo,
+          package: "",
+          activity: "",
+          shortActivity: "",
+          error: e instanceof Error ? e.message : String(e)
+      };
+    }
   }
 }

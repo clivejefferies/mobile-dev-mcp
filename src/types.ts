@@ -82,3 +82,11 @@ export interface GetUITreeResponse {
   elements: UIElement[];
   error?: string;
 }
+
+export interface GetCurrentScreenResponse {
+  device: DeviceInfo;
+  package: string;
+  activity: string;
+  shortActivity: string;
+  error?: string;
+}

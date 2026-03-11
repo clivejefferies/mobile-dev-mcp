@@ -262,6 +262,26 @@ Get the current UI hierarchy from the device. Returns a structured JSON represen
 }
 ```
 
+### get_current_screen
+Get the currently visible activity on an Android device.
+
+**Input:**
+```jsonc
+{
+  "deviceId": "emulator-5554" // Optional: target specific device
+}
+```
+
+**Response:**
+```json
+{
+  "device": { /* device info */ },
+  "package": "com.example.app",
+  "activity": "com.example.app.LoginActivity",
+  "shortActivity": "LoginActivity"
+}
+```
+
 ---
 
 ## Recommended Workflow
