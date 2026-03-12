@@ -604,7 +604,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error("x and y coordinates are required and must be numbers");
       }
 
-      let result: any;
+      let result: TapResponse;
       if (effectivePlatform === "android") {
         result = await androidInteract.tap(x, y, deviceId)
       } else {

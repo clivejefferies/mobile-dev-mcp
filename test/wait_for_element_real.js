@@ -1,9 +1,19 @@
 import { AndroidInteract } from "../src/android/interact.js";
 import { AndroidObserve } from "../src/android/observe.js";
-// Set ADB path from user context
-process.env.ADB_PATH = "/Users/clivejefferies/Library/Android/sdk/platform-tools/adb";
-const APP_ID = "com.ideamechanics.modul8";
-const DEVICE_ID = "51181FDAP0031Y"; // From `adb devices` output
+// Configure ADB path and target via env vars or CLI args.
+// Usage: node test/wait_for_element_real.js [deviceId] [appId]
+// Priority: CLI args > environment variables
+const args = process.argv.slice(2);
+const DEVICE_ID = args[0] || process.env.DEVICE_ID;
+const APP_ID = args[1] || process.env.APP_ID;
+
+// Do not hard-code ADB_PATH here. If the user supplied ADB_PATH in the environment, leave it as-is.
+// (process.env.ADB_PATH may be set externally before running this script.)
+
+if (!DEVICE_ID || !APP_ID) {
+  console.error("Usage: node test/wait_for_element_real.js <deviceId> <appId> or set DEVICE_ID and APP_ID env vars");
+  process.exit(1);
+}
 async function runRealTest() {
     console.log(`Connecting to device ${DEVICE_ID}...`);
     const interact = new AndroidInteract();
