@@ -1,9 +1,8 @@
-import { AndroidObserve } from "./src/android/observe.js";
-import { AndroidInteract } from "./src/android/interact.js";
-import { iOSObserve } from "./src/ios/observe.js";
-import { iOSInteract } from "./src/ios/interact.js";
+import { AndroidObserve } from "../../src/android/observe.js";
+import { AndroidInteract } from "../../src/android/interact.js";
+import { iOSObserve } from "../../src/ios/observe.js";
+import { iOSInteract } from "../../src/ios/interact.js";
 import fs from "fs/promises";
-import path from "path";
 
 const androidObserve = new AndroidObserve();
 const androidInteract = new AndroidInteract();
@@ -12,18 +11,17 @@ const iosInteract = new iOSInteract();
 
 async function main() {
   const args = process.argv.slice(2);
-  const platform = args[0] as string; // Cast to string first
+  const platform = args[0] as string;
   const appId = args[1];
 
   if ((platform !== "android" && platform !== "ios") || !appId) {
-     console.error("Usage: npx tsx smoke-test.ts <android|ios> <appId>");
-     process.exit(1);
+    console.error("Usage: npx tsx test/smoke-test.ts <android|ios> <appId>");
+    process.exit(1);
   }
 
   console.log(`\n🚀 Starting smoke test for ${platform} app: ${appId}`);
 
   try {
-    // 1. Start App
     console.log(`[1/4] Starting app...`);
     let startResult: boolean;
     let launchTimeMs: number;
@@ -37,18 +35,16 @@ async function main() {
       startResult = result.appStarted;
       launchTimeMs = result.launchTimeMs;
     }
-    
+
     if (startResult) {
       console.log(`✅ App started successfully (Launch time: ${launchTimeMs}ms)`);
     } else {
       throw new Error("Failed to start app");
     }
 
-    // Wait for app to settle
     console.log(`⏳ Waiting 3s for app to load...`);
     await new Promise(r => setTimeout(r, 3000));
 
-    // 2. Capture Screenshot
     console.log(`[2/4] Capturing screenshot...`);
     let screenshotBase64: string;
     let resolution: { width: number; height: number };
@@ -62,7 +58,7 @@ async function main() {
       screenshotBase64 = result.screenshot;
       resolution = result.resolution;
     }
-    
+
     if (screenshotBase64) {
       const fileName = `smoke-test-${platform}.png`;
       await fs.writeFile(fileName, Buffer.from(screenshotBase64, 'base64'));
@@ -71,31 +67,28 @@ async function main() {
       throw new Error("Failed to capture screenshot");
     }
 
-    // 3. Get Logs
     console.log(`[3/4] Fetching logs...`);
     let logsCount = 0;
     let logs: string[] = [];
 
     if (platform === "android") {
-       const result = await androidObserve.getLogs(appId, 50);
-       logsCount = result.logCount;
-       logs = result.logs;
+      const result = await androidObserve.getLogs(appId, 50);
+      logsCount = result.logCount;
+      logs = result.logs;
     } else {
-       const result = await iosObserve.getLogs(appId);
-       logsCount = result.logCount;
-       logs = result.logs;
+      const result = await iosObserve.getLogs(appId);
+      logsCount = result.logCount;
+      logs = result.logs;
     }
-    
+
     console.log(`✅ Retrieved ${logsCount} log lines`);
-    // Print last log line as sample
     if (logs.length > 0) {
       console.log(`   Sample: "${logs[logs.length - 1].substring(0, 80)}..."`);
     }
 
-    // 4. Terminate App
     console.log(`[4/4] Terminating app...`);
     let termResult: boolean;
-    
+
     if (platform === "android") {
       const result = await androidInteract.terminateApp(appId);
       termResult = result.appTerminated;
@@ -119,4 +112,3 @@ async function main() {
 }
 
 main();
-

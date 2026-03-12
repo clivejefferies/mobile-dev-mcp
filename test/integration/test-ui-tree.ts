@@ -9,8 +9,8 @@
  *   npx tsx test-ui-tree.ts ios booted
  */
 
-import { AndroidObserve } from "./src/android/observe.js";
-import { iOSObserve } from "./src/ios/observe.js";
+import { AndroidObserve } from '../../src/android/observe.js';
+import { iOSObserve } from '../../src/ios/observe.js';
 
 async function main() {
   const args = process.argv.slice(2);

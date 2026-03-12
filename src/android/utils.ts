@@ -79,16 +79,72 @@ export function getDeviceInfo(deviceId: string, metadata: Partial<DeviceInfo> = 
 
 export async function getAndroidDeviceMetadata(appId: string, deviceId?: string): Promise<DeviceInfo> {
   try {
+    // If no deviceId provided, try to auto-detect a single connected device
+    let resolvedDeviceId = deviceId;
+    if (!resolvedDeviceId) {
+      try {
+        const devicesOutput = await execAdb(['devices']);
+        // Parse lines like: "<serial>\tdevice"
+        const lines = devicesOutput.split('\n').map(l => l.trim()).filter(Boolean);
+        const deviceLines = lines.slice(1) // skip header
+          .map(l => l.split('\t'))
+          .filter(parts => parts.length >= 2 && parts[1] === 'device')
+          .map(parts => parts[0]);
+        if (deviceLines.length === 1) {
+          resolvedDeviceId = deviceLines[0];
+        }
+      } catch (e) {
+        // ignore and continue without resolvedDeviceId
+      }
+    }
+
     // Run these in parallel to avoid sequential timeouts
     const [osVersion, model, simOutput] = await Promise.all([
-      execAdb(['shell', 'getprop', 'ro.build.version.release'], deviceId).catch(() => ''),
-      execAdb(['shell', 'getprop', 'ro.product.model'], deviceId).catch(() => ''),
-      execAdb(['shell', 'getprop', 'ro.kernel.qemu'], deviceId).catch(() => '0')
+      execAdb(['shell', 'getprop', 'ro.build.version.release'], resolvedDeviceId).catch(() => ''),
+      execAdb(['shell', 'getprop', 'ro.product.model'], resolvedDeviceId).catch(() => ''),
+      execAdb(['shell', 'getprop', 'ro.kernel.qemu'], resolvedDeviceId).catch(() => '0')
     ])
     
     const simulator = simOutput === '1'
-    return { platform: 'android', id: deviceId || 'default', osVersion, model, simulator }
+    return { platform: 'android', id: resolvedDeviceId || 'default', osVersion, model, simulator }
   } catch (e) {
     return { platform: 'android', id: deviceId || 'default', osVersion: '', model: '', simulator: false }
+  }
+}
+
+export async function listAndroidDevices(appId?: string): Promise<DeviceInfo[]> {
+  try {
+    const devicesOutput = await execAdb(['devices', '-l'])
+    const lines = devicesOutput.split('\n').map(l => l.trim()).filter(Boolean)
+    // Skip header if present (some adb versions include 'List of devices attached')
+    const deviceLines = lines.filter(l => !l.startsWith('List of devices')).map(l => l)
+    const serials = deviceLines.map(line => line.split(/\s+/)[0]).filter(Boolean)
+
+    const infos = await Promise.all(serials.map(async (serial) => {
+      try {
+        const [osVersion, model, simOutput] = await Promise.all([
+          execAdb(['shell', 'getprop', 'ro.build.version.release'], serial).catch(() => ''),
+          execAdb(['shell', 'getprop', 'ro.product.model'], serial).catch(() => ''),
+          execAdb(['shell', 'getprop', 'ro.kernel.qemu'], serial).catch(() => '0')
+        ])
+        const simulator = simOutput === '1'
+        let appInstalled = false
+        if (appId) {
+          try {
+            const pm = await execAdb(['shell', 'pm', 'path', appId], serial)
+            appInstalled = !!(pm && pm.includes('package:'))
+          } catch {
+            appInstalled = false
+          }
+        }
+        return { platform: 'android', id: serial, osVersion, model, simulator, appInstalled } as DeviceInfo & { appInstalled?: boolean }
+      } catch {
+        return { platform: 'android', id: serial, osVersion: '', model: '', simulator: false, appInstalled: false } as DeviceInfo & { appInstalled?: boolean }
+      }
+    }))
+
+    return infos
+  } catch (e) {
+    return []
   }
 }

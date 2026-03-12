@@ -2,6 +2,14 @@
 
 All notable changes to the **Mobile Debug MCP** project will be documented in this file.
 
+## [0.8.0]
+
+### Added
+- **`list_devices` tool**: enumerate connected Android devices and iOS simulators. Returns device metadata (id, platform, osVersion, model, simulator, appInstalled).
+
+### Changed
+- Device-selection: server handlers now use a central resolver to pick a sensible default device when `deviceId` is omitted. This reduces duplication and makes behavior deterministic when multiple devices are attached.
+
 ## [0.7.0]
 
 ### Added

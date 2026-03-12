@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "esModuleInterop": true
   },
-  "exclude": ["smoke-test.ts", "test-ui-tree.ts"]
+  "exclude": ["smoke-test.ts", "test-ui-tree.ts", "test/**/*.ts"]
 }

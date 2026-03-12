@@ -9,7 +9,10 @@
   "scripts": {
     "build": "tsc",
     "start": "node ./dist/server.js",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "test:unit": "tsx test/unit/index.ts",
+    "test:integration": "tsx test/integration/index.ts",
+    "test": "npm run test:unit && npm run test:integration"
   },
   "engines": {
     "node": ">=18"
@@ -21,6 +24,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.4.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }

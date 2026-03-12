@@ -131,3 +131,48 @@ export async function getIOSDeviceMetadata(deviceId: string = "booted"): Promise
     })
   })
 }
+
+export async function listIOSDevices(appId?: string): Promise<DeviceInfo[]> {
+  return new Promise((resolve) => {
+    execFile(XCRUN, ['simctl', 'list', 'devices', '--json'], (err, stdout) => {
+      if (err || !stdout) return resolve([])
+      try {
+        const data = JSON.parse(stdout)
+        const devicesMap = data.devices || {}
+        const out: DeviceInfo[] = []
+        const checks: Promise<void>[] = []
+
+        for (const runtime in devicesMap) {
+          const devices = devicesMap[runtime]
+          if (Array.isArray(devices)) {
+            for (const device of devices) {
+              const info: any = {
+                platform: 'ios',
+                id: device.udid,
+                osVersion: parseRuntimeName(runtime),
+                model: device.name,
+                simulator: true
+              }
+
+              if (appId) {
+                // check if installed
+                const p = execCommand(['simctl', 'get_app_container', device.udid, appId, 'data'], device.udid)
+                  .then(() => { info.appInstalled = true })
+                  .catch(() => { info.appInstalled = false })
+                  .then(() => { out.push(info) })
+                checks.push(p)
+              } else {
+                out.push(info)
+              }
+            }
+          }
+        }
+
+        Promise.all(checks).then(() => resolve(out)).catch(() => resolve(out))
+      } catch (e) {
+        resolve([])
+      }
+    })
+  })
+}
+

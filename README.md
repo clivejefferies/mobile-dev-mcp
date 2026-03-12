@@ -98,6 +98,21 @@ Example WebUI MCP config using `npx --yes` and environment variables:
 
 All tools accept a JSON input payload and return a structured JSON response. **Every response includes a `device` object** (with information about the selected device/simulator used for the operation), plus the tool-specific output.
 
+### list_devices
+Enumerate connected Android devices and iOS simulators.
+
+Input (optional):
+```jsonc
+{ "platform": "android" | "ios" }
+```
+
+Response:
+```json
+{ "devices": [ { "id": "emulator-5554", "platform": "android", "osVersion": "11", "model": "sdk_gphone64_arm64", "simulator": true, "appInstalled": false } ] }
+```
+
+Use `list_devices` when multiple devices are attached to inspect metadata and pick a device explicitly by passing `deviceId` to subsequent tool calls.
+
 ### start_app
 Launch a mobile app.
 
