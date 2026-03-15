@@ -72,7 +72,7 @@ async function runRealTest() {
     console.log(`Calls: ${calls} ${calls === 3 ? "PASS" : "FAIL"}`);
     console.log(`Elapsed time (should be >= 1000ms): ${elapsed3} ${elapsed3 >= 1000 ? "PASS" : "FAIL"}`);
 
-  } catch (error) {
+  } catch {
     console.error("Test failed with error:", error);
   }
 }

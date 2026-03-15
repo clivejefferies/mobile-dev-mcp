@@ -4,7 +4,6 @@ import { StartAppResponse, TerminateAppResponse, RestartAppResponse, ResetAppDat
 import { execCommand, getIOSDeviceMetadata, validateBundleId, IDB } from "./utils.js"
 import { iOSObserve } from "./observe.js"
 import path from "path"
-import { existsSync } from "fs"
 
 export class iOSInteract {
   private observe = new iOSObserve();
@@ -172,7 +171,7 @@ export class iOSInteract {
             });
             return { device, installed: true }
           }
-        } catch (inner) {
+        } catch {
           // fallthrough
         }
 
@@ -248,8 +247,8 @@ export class iOSInteract {
         device,
         dataCleared: true
       }
-    } catch (err) {
-      throw new Error(`Failed to clear data for ${bundleId}: ${err instanceof Error ? err.message : String(err)}`)
+    } catch (e) {
+      throw new Error(`Failed to clear data for ${bundleId}: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 }

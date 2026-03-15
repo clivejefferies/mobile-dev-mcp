@@ -17,14 +17,14 @@ function isAndroidDir(p: string) {
   try {
     const listing = fs.readdirSync(p)
     return listing.includes('gradlew') || listing.some((f: string) => f.endsWith('.gradle') || f === 'app' || f === 'settings.gradle')
-  } catch (e) { return false }
+  } catch { return false }
 }
 
 function isIosDir(p: string) {
   try {
     const listing = fs.readdirSync(p)
     return listing.some((f: string) => f.endsWith('.xcodeproj') || f.endsWith('.xcworkspace'))
-  } catch (e) { return false }
+  } catch { return false }
 }
 
 let runner: string | undefined
@@ -56,7 +56,7 @@ proc.on('close', (code) => {
       console.error('Integration reported not installed:', obj)
       process.exit(4)
     }
-  } catch (e) {
+  } catch {
     console.error('Failed to parse runner output')
     console.error(stdout)
     process.exit(5)

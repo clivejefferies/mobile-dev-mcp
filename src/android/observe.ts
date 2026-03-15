@@ -27,7 +27,7 @@ async function getScreenResolution(deviceId?: string): Promise<{ width: number; 
     if (match) {
       return { width: parseInt(match[1]), height: parseInt(match[2]) };
     }
-  } catch (e) {
+  } catch {
     // ignore
   }
   return { width: 0, height: 0 };
@@ -137,8 +137,8 @@ export class AndroidObserve {
            if (xmlContent && xmlContent.trim().length > 0 && !xmlContent.includes("ERROR:")) {
               break; // Success
            }
-        } catch (err) {
-           console.error(`Attempt ${attempts} failed: ${err}`);
+        } catch (e) {
+           console.error(`Attempt ${attempts} failed: ${e}`);
         }
         
         if (attempts === maxAttempts) {

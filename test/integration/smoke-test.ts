@@ -105,7 +105,7 @@ async function main() {
 
     console.log(`\n✨ Smoke test COMPLETED SUCCESSFULLY! ✨\n`);
 
-  } catch (error) {
+  } catch {
     console.error(`\n❌ Smoke test FAILED:`, error);
     process.exit(1);
   }

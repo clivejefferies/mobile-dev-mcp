@@ -67,7 +67,7 @@ async function main() {
         console.log(`- Elements with text: ${withText}`);
     }
 
-  } catch (error) {
+  } catch {
     console.error("\n❌ Test Failed:", error);
     process.exit(1);
   }

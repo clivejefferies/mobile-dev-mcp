@@ -2,7 +2,6 @@ import assert from 'assert'
 import fs from 'fs/promises'
 import os from 'os'
 import path from 'path'
-import { createRequire } from 'module'
 
 // This test mocks child_process.spawn and simulates a Gradle build producing an APK
 // and an adb install. It does not patch AndroidInteract.installApp itself so the
@@ -15,11 +14,6 @@ async function makeTempFile(ext: string) {
   return { dir, file }
 }
 
-async function makeTempDirWith(name: string) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mcp-test-'))
-  await fs.writeFile(path.join(dir, name), '')
-  return dir
-}
 
 export async function run() {
   // Create a fake adb executable in a temporary bin dir and prepend to PATH so

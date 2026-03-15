@@ -32,7 +32,7 @@ async function main() {
     } else {
       console.log('No screenshot returned')
     }
-  } catch (err) {
+  } catch {
     console.error('Smoke test script failed:', err)
     process.exit(1)
   }

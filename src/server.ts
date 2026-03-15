@@ -8,40 +8,19 @@ import {
 
 import {
   StartAppResponse,
-  DeviceInfo,
   TerminateAppResponse,
   RestartAppResponse,
   ResetAppDataResponse,
-  GetUITreeResponse,
-  GetCurrentScreenResponse,
-  WaitForElementResponse,
-  TapResponse,
-  SwipeResponse,
-  TypeTextResponse,
-  PressBackResponse,
   InstallAppResponse
 } from "./types.js"
 
-import { AndroidObserve } from "./android/observe.js"
-import { AndroidInteract } from "./android/interact.js"
-import { iOSObserve } from "./ios/observe.js"
-import { iOSInteract } from "./ios/interact.js"
-import { resolveTargetDevice, listDevices } from "./resolve-device.js"
-import { startAndroidLogStream, readLogStreamLines, stopAndroidLogStream } from "./android/utils.js"
-import { startIOSLogStream, readIOSLogStreamLines, stopIOSLogStream } from "./ios/utils.js"
-import { promises as fs } from 'fs'
-import path from 'path'
-import { installAppHandler } from './tools/install.js'
-import { startAppHandler, terminateAppHandler, restartAppHandler, resetAppDataHandler } from './tools/app.js'
-import { getLogsHandler, startLogStreamHandler, readLogStreamHandler, stopLogStreamHandler } from './tools/logs.js'
-import { listDevicesHandler } from './tools/devices.js'
-import { captureScreenshotHandler } from './tools/screenshot.js'
-import { getUITreeHandler, getCurrentScreenHandler, waitForElementHandler, tapHandler, swipeHandler, typeTextHandler, pressBackHandler } from './tools/ui.js'
+import { ToolsInteract } from './tools/interact.js'
+import { ToolsObserve } from './tools/observe.js'
+import { AndroidInteract } from './android/interact.js'
+import { iOSInteract } from './ios/interact.js'
+import { AndroidObserve } from './android/observe.js'
+import { iOSObserve } from './ios/observe.js'
 
-const androidObserve = new AndroidObserve()
-const androidInteract = new AndroidInteract()
-const iosObserve = new iOSObserve()
-const iosInteract = new iOSInteract()
 
 const server = new Server(
   {
@@ -418,44 +397,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     if (name === "start_app") {
       const { platform, appId, deviceId } = args as any
-      const result = await startAppHandler({ platform, appId, deviceId })
+      const res = await (platform === 'android' ? new AndroidInteract().startApp(appId, deviceId) : new iOSInteract().startApp(appId, deviceId))
       const response: StartAppResponse = {
-        device: result.device,
-        appStarted: result.appStarted,
-        launchTimeMs: result.launchTimeMs
+        device: res.device,
+        appStarted: res.appStarted,
+        launchTimeMs: res.launchTimeMs
       }
       return wrapResponse(response)
     }
 
     if (name === "terminate_app") {
       const { platform, appId, deviceId } = args as any
-      const result = await terminateAppHandler({ platform, appId, deviceId })
-      const response: TerminateAppResponse = { device: result.device, appTerminated: result.appTerminated }
+      const res = await (platform === 'android' ? new AndroidInteract().terminateApp(appId, deviceId) : new iOSInteract().terminateApp(appId, deviceId))
+      const response: TerminateAppResponse = { device: res.device, appTerminated: res.appTerminated }
       return wrapResponse(response)
     }
 
     if (name === "restart_app") {
       const { platform, appId, deviceId } = args as any
-      const result = await restartAppHandler({ platform, appId, deviceId })
-      const response: RestartAppResponse = { device: result.device, appRestarted: result.appRestarted, launchTimeMs: result.launchTimeMs }
+      const res = await (platform === 'android' ? new AndroidInteract().restartApp(appId, deviceId) : new iOSInteract().restartApp(appId, deviceId))
+      const response: RestartAppResponse = { device: res.device, appRestarted: res.appRestarted, launchTimeMs: res.launchTimeMs }
       return wrapResponse(response)
     }
 
     if (name === "reset_app_data") {
       const { platform, appId, deviceId } = args as any
-      const result = await resetAppDataHandler({ platform, appId, deviceId })
-      const response: ResetAppDataResponse = { device: result.device, dataCleared: result.dataCleared }
+      const res = await (platform === 'android' ? new AndroidInteract().resetAppData(appId, deviceId) : new iOSInteract().resetAppData(appId, deviceId))
+      const response: ResetAppDataResponse = { device: res.device, dataCleared: res.dataCleared }
       return wrapResponse(response)
     }
 
     if (name === "install_app") {
         const { platform, appPath, deviceId } = args as any
-        const result = await installAppHandler({ platform, appPath, deviceId })
+        const res = await ToolsInteract.installAppHandler({ platform, appPath, deviceId })
         const response: InstallAppResponse = {
-          device: result.device,
-          installed: result.installed,
-          output: (result as any).output,
-          error: (result as any).error
+          device: res.device,
+          installed: res.installed,
+          output: (res as any).output,
+          error: (res as any).error
         }
         return wrapResponse(response)
       }
@@ -463,7 +442,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     if (name === "get_logs") {
       const { platform, appId, deviceId, lines } = args as any
-      const res = await getLogsHandler({ platform, appId, deviceId, lines })
+      const res = await ToolsObserve.getLogsHandler({ platform, appId, deviceId, lines })
       return {
         content: [
           { type: 'text', text: JSON.stringify({ device: res.device, result: { lines: res.logs.length, crashLines: res.crashLines.length > 0 ? res.crashLines : undefined } }, null, 2) },
@@ -474,79 +453,79 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     if (name === "list_devices") {
       const { platform, appId } = (args || {}) as any
-      const res = await listDevicesHandler({ platform, appId })
+      const res = await ToolsObserve.listDevicesHandler({ platform, appId })
       return wrapResponse(res)
     }
 
 
     if (name === "capture_screenshot") {
       const { platform, deviceId } = args as any
-      const res = await captureScreenshotHandler({ platform, deviceId })
+      const res = await ToolsObserve.captureScreenshotHandler({ platform, deviceId })
       return {
         content: [
-          { type: 'text', text: JSON.stringify({ device: res.device, result: { resolution: res.resolution } }, null, 2) },
-          { type: 'image', data: res.screenshot, mimeType: 'image/png' }
+          { type: 'text', text: JSON.stringify({ device: res.device, result: { resolution: (res as any).resolution } }, null, 2) },
+          { type: 'image', data: (res as any).screenshot, mimeType: 'image/png' }
         ]
       }
     }
 
     if (name === "get_ui_tree") {
       const { platform, deviceId } = args as any
-      const res = await getUITreeHandler({ platform, deviceId })
+      const res = await (platform === 'android' ? new AndroidObserve().getUITree(deviceId) : new iOSObserve().getUITree(deviceId))
       return wrapResponse(res)
     }
 
     if (name === "get_current_screen") {
       const { deviceId } = (args || {}) as any
-      const res = await getCurrentScreenHandler({ deviceId })
+      const res = await new AndroidObserve().getCurrentScreen(deviceId)
       return wrapResponse(res)
     }
 
     if (name === "wait_for_element") {
       const { platform, text, timeout, deviceId } = (args || {}) as any
-      const res = await waitForElementHandler({ platform, text, timeout, deviceId })
+      const res = await (platform === 'android' ? new AndroidInteract().waitForElement(text, timeout, deviceId) : new iOSInteract().waitForElement(text, timeout, deviceId))
       return wrapResponse(res)
     }
 
     if (name === "tap") {
       const { platform, x, y, deviceId } = (args || {}) as any
-      const res = await tapHandler({ platform, x, y, deviceId })
+      const res = await (platform === 'android' ? new AndroidInteract().tap(x, y, deviceId) : new iOSInteract().tap(x, y, deviceId))
       return wrapResponse(res)
     }
 
     if (name === "swipe") {
       const { x1, y1, x2, y2, duration, deviceId } = (args || {}) as any
-      const res = await swipeHandler({ x1, y1, x2, y2, duration, deviceId })
+      const res = await new AndroidInteract().swipe(x1, y1, x2, y2, duration, deviceId)
       return wrapResponse(res)
     }
 
     if (name === "type_text") {
       const { text, deviceId } = (args || {}) as any
-      const res = await typeTextHandler({ text, deviceId })
+      const res = await new AndroidInteract().typeText(text, deviceId)
       return wrapResponse(res)
     }
 
     if (name === "press_back") {
       const { deviceId } = (args || {}) as any
-      const res = await pressBackHandler({ deviceId })
+      const res = await new AndroidInteract().pressBack(deviceId)
       return wrapResponse(res)
     }
 
     if (name === 'start_log_stream') {
       const { platform, packageName, level, sessionId, deviceId } = args as any
-      const res = await startLogStreamHandler({ platform, packageName, level, sessionId, deviceId })
+      const res = await ToolsObserve.startLogStreamHandler({ platform, packageName, level, sessionId, deviceId })
       return wrapResponse(res)
     }
 
     if (name === 'read_log_stream') {
       const { platform, sessionId, limit, since } = args as any
-      const res = await readLogStreamHandler({ platform, sessionId, limit, since })
+      const res = await ToolsObserve.readLogStreamHandler({ platform, sessionId, limit, since })
       return wrapResponse(res)
     }
 
     if (name === 'stop_log_stream') {
       const { platform, sessionId } = (args || {}) as any
-      const res = await stopLogStreamHandler({ platform, sessionId })
+      const res = await ToolsObserve.stopLogStreamHandler({ platform, sessionId })
       return wrapResponse(res)
     }
   } catch (error) {

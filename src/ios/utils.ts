@@ -125,7 +125,7 @@ export async function getIOSDeviceMetadata(deviceId: string = "booted"): Promise
           }
         }
         resolve(fallback)
-      } catch (error) {
+      } catch {
         resolve(fallback)
       }
     })
@@ -169,7 +169,7 @@ export async function listIOSDevices(appId?: string): Promise<DeviceInfo[]> {
         }
 
         Promise.all(checks).then(() => resolve(out)).catch(() => resolve(out))
-      } catch (e) {
+      } catch {
         resolve([])
       }
     })
@@ -192,14 +192,14 @@ export function _clearIOSActiveLogStream(sessionId: string) {
   iosActiveLogStreams.delete(sessionId)
 }
 
-export async function startIOSLogStream(bundleId: string, level: 'error' | 'warn' | 'info' | 'debug' = 'error', deviceId: string = 'booted', sessionId: string = 'default') : Promise<{ success: boolean; stream_started?: boolean; error?: string }> {
+export async function startIOSLogStream(bundleId: string, deviceId: string = 'booted', sessionId: string = 'default') : Promise<{ success: boolean; stream_started?: boolean; error?: string }> {
   try {
     // Build predicate to filter by process or subsystem
     const predicate = `process == "${bundleId}" or subsystem contains "${bundleId}"`
 
     // Prevent multiple streams per session
     if (iosActiveLogStreams.has(sessionId)) {
-      try { iosActiveLogStreams.get(sessionId)!.proc.kill() } catch (e) {}
+      try { iosActiveLogStreams.get(sessionId)!.proc.kill() } catch {}
       iosActiveLogStreams.delete(sessionId)
     }
 
@@ -231,14 +231,14 @@ export async function startIOSLogStream(bundleId: string, level: 'error' | 'warn
       }
     })
 
-    proc.on('close', (code) => {
+    proc.on('close', () => {
       stream.end()
       iosActiveLogStreams.delete(sessionId)
     })
 
     iosActiveLogStreams.set(sessionId, { proc, file })
     return { success: true, stream_started: true }
-  } catch (err) {
+  } catch {
     return { success: false, error: 'log_stream_start_failed' }
   }
 }
@@ -246,7 +246,7 @@ export async function startIOSLogStream(bundleId: string, level: 'error' | 'warn
 export async function stopIOSLogStream(sessionId: string = 'default'): Promise<{ success: boolean }> {
   const entry = iosActiveLogStreams.get(sessionId)
   if (!entry) return { success: true }
-  try { entry.proc.kill() } catch (e) {}
+  try { entry.proc.kill() } catch {}
   iosActiveLogStreams.delete(sessionId)
   return { success: true }
 }
@@ -284,7 +284,7 @@ export async function readIOSLogStreamLines(sessionId: string = 'default', limit
     const crashEntry = entries.find(e => e.crash)
     const crash_summary = crashEntry ? { crash_detected: true, exception: crashEntry.exception, sample: crashEntry.message } : { crash_detected: false }
     return { entries, crash_summary }
-  } catch (e) {
+  } catch {
     return { entries: [], crash_summary: { crash_detected: false } }
   }
 }

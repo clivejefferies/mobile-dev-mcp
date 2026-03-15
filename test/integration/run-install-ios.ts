@@ -12,7 +12,7 @@ async function main() {
   try {
     const res = await inter.installApp(appPath, deviceId || 'booted')
     console.log(JSON.stringify(res, null, 2))
-  } catch (err) {
+  } catch {
     console.error('Install failed:', err instanceof Error ? err.message : String(err))
     process.exit(2)
   }
