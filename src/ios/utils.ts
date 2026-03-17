@@ -1,10 +1,30 @@
-import { execFile, spawn } from "child_process"
+import { execFile, spawn, execSync } from "child_process"
 import { DeviceInfo } from "../types.js"
 import { promises as fsPromises } from 'fs'
 import path from 'path'
 
 export const XCRUN = process.env.XCRUN_PATH || "xcrun"
-export const IDB = "idb"
+export const IDB = process.env.IDB_PATH || (() => {
+  try {
+    const p = execSync('which idb', { stdio: ['ignore','pipe','ignore'] }).toString().trim()
+    if (p) return p
+  } catch {}
+  try {
+    const p2 = execSync('command -v idb', { stdio: ['ignore','pipe','ignore'] }).toString().trim()
+    if (p2) return p2
+  } catch {}
+  // check common user locations
+  const common = [
+    `${process.env.HOME}/Library/Python/3.9/bin/idb`,
+    `${process.env.HOME}/Library/Python/3.10/bin/idb`,
+    '/opt/homebrew/bin/idb',
+    '/usr/local/bin/idb',
+  ]
+  for (const c of common) {
+    try { execSync(`test -x ${c}`, { stdio: ['ignore','pipe','ignore'] }); return c } catch {}
+  }
+  return 'idb'
+})()
 
 export interface IOSResult {
   output: string
@@ -60,6 +80,42 @@ export function execCommand(args: string[], deviceId: string = "booted"): Promis
       reject(err)
     })
   })
+}
+
+export function execCommandWithDiagnostics(args: string[], deviceId: string = "booted") {
+  // Run synchronously to capture stdout/stderr and exitCode reliably for diagnostics
+  const timeoutMs = args.includes('log') ? 10000 : 5000
+  const res = spawnSync(XCRUN, args, { encoding: 'utf8', timeout: timeoutMs }) as any
+  const runResult = {
+    exitCode: typeof res.status === 'number' ? res.status : null,
+    stdout: res.stdout || '',
+    stderr: res.stderr || '',
+    envSnapshot: {
+      PATH: process.env.PATH,
+      IDB_PATH: process.env.IDB_PATH,
+      JAVA_HOME: process.env.JAVA_HOME,
+      HOME: process.env.HOME
+    },
+    command: XCRUN,
+    args,
+    deviceId
+  }
+
+  if (res.status !== 0) {
+    // include suggested fixes for common errors
+    const suggested: string[] = []
+    if ((runResult.stderr || '').includes('xcodebuild: error')) {
+      suggested.push('Ensure the project/workspace path is correct and xcodebuild is installed and accessible.')
+    }
+    if ((runResult.stderr || '').includes('No such file or directory') || (runResult.stderr || '').includes('not found')) {
+      suggested.push('Check that Xcode Command Line Tools are installed and XCRUN_PATH is set if using non-standard location.')
+    }
+
+    // Return diagnostics object
+    return { runResult: { ...runResult, suggestedFixes: suggested } }
+  }
+
+  return { runResult: { ...runResult, suggestedFixes: [] } }
 }
 
 function parseRuntimeName(runtime: string): string {
