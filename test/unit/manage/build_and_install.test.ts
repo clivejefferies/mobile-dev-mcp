@@ -6,14 +6,11 @@ import path from 'path'
 async function makeAndroidProject() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mcp-build-ai-android-'))
   const gradlew = path.join(dir, 'gradlew')
-  const script = `#!/usr/bin/env node
-const fs = require('fs')
-const path = require('path')
-const apk = path.join(process.cwd(),'app','build','outputs','apk','debug','app-debug.apk')
-fs.mkdirSync(path.dirname(apk), { recursive: true })
-fs.writeFileSync(apk, 'fake-apk')
-console.log('BUILD SUCCESS')
-process.exit(0)
+  const script = `#!/bin/sh
+mkdir -p "$(pwd)/app/build/outputs/apk/debug"
+echo 'fake-apk' > "$(pwd)/app/build/outputs/apk/debug/app-debug.apk"
+echo 'BUILD SUCCESS'
+exit 0
 `
   await fs.writeFile(gradlew, script, { mode: 0o755 })
   return dir

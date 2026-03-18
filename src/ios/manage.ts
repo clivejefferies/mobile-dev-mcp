@@ -25,7 +25,8 @@ export class iOSManage {
       }
 
       await new Promise<void>((resolve, reject) => {
-        const proc = spawn('xcodebuild', buildArgs, { cwd: projectPath })
+        const xcodeCmd = process.env.XCODEBUILD_PATH || 'xcodebuild'
+        const proc = spawn(xcodeCmd, buildArgs, { cwd: projectPath })
         let stderr = ''
         proc.stderr?.on('data', d => stderr += d.toString())
         proc.on('close', code => {

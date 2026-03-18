@@ -23,6 +23,7 @@ process.exit(1)
   const origAdbPath = process.env.ADB_PATH
   // Prefer explicit ADB_PATH to point at our fake adb to ensure deterministic behavior
   process.env.ADB_PATH = adbPath
+  // Prefix PATH so our fake adb is preferred but keep original PATH to allow /usr/bin/env node to work
   process.env.PATH = `${binDir}:${origPath}`
 
   const { AndroidManage } = await import('../../../src/android/manage.js')
@@ -60,6 +61,7 @@ process.exit(1)
   const origXcrunPath = process.env.XCRUN_PATH
   // Point XCRUN_PATH to our fake xcrun to ensure deterministic failure
   process.env.XCRUN_PATH = xcrunPath
+  // Prefix PATH so our fake xcrun is preferred but keep original PATH to allow /usr/bin/env node to work
   process.env.PATH = `${binDir2}:${origPath2}`
 
   try {

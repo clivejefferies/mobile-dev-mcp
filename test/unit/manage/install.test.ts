@@ -21,12 +21,13 @@ export async function run() {
   // binary during unit tests and exercises the installApp logic.
   const binDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mcp-adb-bin-'))
   const adbPath = path.join(binDir, 'adb')
-  const adbScript = `#!/usr/bin/env node
-console.log('Performing Streamed Install')
-console.log('Success')
-process.exit(0)
+  const adbScript = `#!/bin/sh
+echo 'Performing Streamed Install'
+echo 'Success'
+exit 0
 `
   await fs.writeFile(adbPath, adbScript, { mode: 0o755 })
+
   const origPath = process.env.PATH || ''
   const origAdbPath = process.env.ADB_PATH
   // Ensure deterministic behavior by pointing ADB_PATH at our fake adb
@@ -51,14 +52,11 @@ process.exit(0)
     // Test: project directory detection for Android (gradlew present as a simple wrapper script)
     const dirGradle = await fs.mkdtemp(path.join(os.tmpdir(), 'mcp-test-'))
     const gradlewPath = path.join(dirGradle, 'gradlew')
-    const gradlewScript = `#!/usr/bin/env node
-const fs = require('fs')
-const path = require('path')
-const apkPath = path.join(process.cwd(), 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk')
-fs.mkdirSync(path.dirname(apkPath), { recursive: true })
-fs.writeFileSync(apkPath, 'fake-apk-binary')
-console.log('BUILD SUCCESS')
-process.exit(0)
+    const gradlewScript = `#!/bin/sh
+mkdir -p "$(pwd)/app/build/outputs/apk/debug"
+echo 'fake-apk-binary' > "$(pwd)/app/build/outputs/apk/debug/app-debug.apk"
+echo 'BUILD SUCCESS'
+exit 0
 `
     await fs.writeFile(gradlewPath, gradlewScript, { mode: 0o755 })
 

@@ -61,7 +61,9 @@ export function execCommand(args: string[], deviceId: string = "booted"): Promis
       })
     }
 
-    const timeoutMs = args.includes('log') ? 30000 : 60000 // 30s for logs, 60s for others
+    const DEFAULT_XCRUN_LOG_TIMEOUT = parseInt(process.env.MCP_XCRUN_LOG_TIMEOUT || '', 10) || 30000 // env (ms) or default 30s
+  const DEFAULT_XCRUN_CMD_TIMEOUT = parseInt(process.env.MCP_XCRUN_TIMEOUT || '', 10) || 60000 // env (ms) or default 60s
+  const timeoutMs = args.includes('log') ? DEFAULT_XCRUN_LOG_TIMEOUT : DEFAULT_XCRUN_CMD_TIMEOUT // choose appropriate timeout
     const timeout = setTimeout(() => {
       child.kill()
       reject(new Error(`Command timed out after ${timeoutMs}ms: ${getXcrunCmd()} ${args.join(' ')}`))
@@ -85,7 +87,9 @@ export function execCommand(args: string[], deviceId: string = "booted"): Promis
 
 export function execCommandWithDiagnostics(args: string[], deviceId: string = "booted") {
   // Run synchronously to capture stdout/stderr and exitCode reliably for diagnostics
-  const timeoutMs = args.includes('log') ? 30000 : 60000
+  const DEFAULT_XCRUN_LOG_TIMEOUT = parseInt(process.env.MCP_XCRUN_LOG_TIMEOUT || '', 10) || 30000
+  const DEFAULT_XCRUN_CMD_TIMEOUT = parseInt(process.env.MCP_XCRUN_TIMEOUT || '', 10) || 60000
+  const timeoutMs = args.includes('log') ? DEFAULT_XCRUN_LOG_TIMEOUT : DEFAULT_XCRUN_CMD_TIMEOUT
   const res = spawnSync(getXcrunCmd(), args, { encoding: 'utf8', timeout: timeoutMs }) as any
   const runResult = {
     exitCode: typeof res.status === 'number' ? res.status : null,
