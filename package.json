@@ -13,8 +13,9 @@
     "healthcheck": "tsx ./scripts/check-idb.ts",
     "install-idb": "tsx ./scripts/install-idb.ts",
     "test:unit": "tsx test/unit/index.ts",
-    "test:integration": "npm run build && tsx test/integration/index.ts",
-    "test": "npm run test:unit && npm run test:integration",
+    "test:integration": "npm run build && tsx test/device/index.ts",
+    "test:device": "npm run build && tsx test/device/index.ts",
+    "test": "npm run test:unit",
     "lint": "eslint --ext .ts,.js src test --quiet",
     "lint:fix": "eslint --ext .ts,.js src test --fix"
   },
