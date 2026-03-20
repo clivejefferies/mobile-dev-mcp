@@ -184,13 +184,13 @@ export class ToolsManage {
     }
   }
 
-  static async installAppHandler({ platform, appPath, deviceId, projectType }: { platform?: 'android' | 'ios', appPath: string, deviceId?: string, projectType?: 'native' | 'kmp' | 'react-native' | 'flutter' }): Promise<InstallAppResponse> {
+  static async installAppHandler({ platform, appPath, deviceId, projectType }: { platform: 'android' | 'ios', appPath: string, deviceId?: string, projectType: 'native' | 'kmp' | 'react-native' | 'flutter' }): Promise<InstallAppResponse> {
     // Enforce explicit platform and projectType: both are mandatory to avoid ambiguity
     if (!platform || !projectType) {
       throw new Error('Both platform and projectType parameters are required (platform: ios|android, projectType: native|kmp|react-native|flutter).')
     }
 
-    const chosenPlatform: 'android'|'ios' = platform as any
+    const chosenPlatform: 'android'|'ios' = platform
 
     if (chosenPlatform === 'android') {
       const resolved = await resolveTargetDevice({ platform: 'android', deviceId })
@@ -245,7 +245,7 @@ export class ToolsManage {
     }
   }
 
-  static async buildAndInstallHandler({ platform, projectPath, deviceId, timeout, projectType }: { platform?: 'android' | 'ios', projectPath: string, deviceId?: string, timeout?: number, projectType?: 'native' | 'kmp' | 'react-native' | 'flutter' }) {
+  static async buildAndInstallHandler({ platform, projectPath, deviceId, timeout, projectType }: { platform: 'android' | 'ios', projectPath: string, deviceId?: string, timeout?: number, projectType: 'native' | 'kmp' | 'react-native' | 'flutter' }) {
     const events: string[] = []
     const pushEvent = (obj: any) => events.push(JSON.stringify(obj))
     const effectiveTimeout = timeout ?? 180000 // reserved for future streaming/timeouts
