@@ -48,10 +48,10 @@ Higher task success with fewer retries.
 - Better Compose / Custom Control Semantics — Complete (Semantic role enrichment and custom-adjustable inference shipped)
 - Verification Stabilization and Temporal Convergence — Complete (Temporal verification and convergence logic shipped)
 - Action Trace and Execution Observability — Complete (Structured execution trace model shipped)
+- Wait and Synchronization Reliability — Complete (RFC 013 folded into the main spec and shipped behavior verified on emulator)
 
 ## Current Focus
 
-- Wait and Synchronization Reliability (implementation + tuning)
 - Actionability Resolution
 - Adjustable Control Precision Hardening
 

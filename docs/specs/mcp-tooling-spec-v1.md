@@ -194,6 +194,34 @@ Examples:
 - `success` indicates condition met or resolution succeeded
 - `success` does NOT indicate outcome correctness
 
+### 6.4 `wait_for_ui_change`
+
+`wait_for_ui_change` synchronizes on observable in-place UI mutation.
+
+Inputs:
+
+- `platform?: "android" | "ios"`
+- `deviceId?: string`
+- `timeout_ms?: number`
+- `stability_window_ms?: number` (default: `300`)
+- `expected_change?: "hierarchy_diff" | "text_change" | "state_change"`
+
+Required semantics:
+
+- success means a qualifying UI mutation was observed and remained stable for a full `stability_window_ms`
+- stabilization MUST reset whenever a synchronization-relevant mutation is observed
+- the stabilization window MUST be measured from the most recent qualifying mutation
+- the implementation MUST treat as synchronization-relevant: element addition or removal, visibility changes, enabled-state changes, navigation transitions, text or content-description changes, subtree structure mutation, and semantic accessibility tree mutation
+- the implementation MUST NOT treat as synchronization-relevant: animation frame updates, layout-only jitter, opacity-only visual transitions, and non-semantic rendering updates
+- partial convergence MUST NOT be reported as success
+- timeout MAY return the last observed state, but MUST NOT report stable convergence
+
+Guidance:
+
+- prefer `wait_for_screen_change` for navigation transitions
+- prefer `wait_for_ui_change` for in-place updates and recomposition-style changes
+- follow with `expect_*` when the expected final state is known
+
 ## 7. Failure Semantics
 
 ### 7.1 Canonical Codes

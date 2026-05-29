@@ -2,6 +2,11 @@
 
 All notable changes to the **Mobile Debug MCP** project will be documented in this file.
 
+## [0.30.0]
+- Folded RFC 013 synchronization semantics into the main spec and aligned the interact docs with the shipped `wait_for_ui_change` behavior.
+- Updated `wait_for_ui_change` to use a 300ms stabilization default and to reset stabilization on new in-place mutations.
+- Validated the in-place UI mutation flow on the Modul8 emulator app, including a delayed state-change case.
+
 ## [0.29.0]
 - Added empty resource handlers and declared the `resources` capability so Codex MCP discovery can complete the handshake against the published npm package.
 - Moved the startup healthcheck behind an opt-in flag to keep the stdio protocol channel quiet by default.
