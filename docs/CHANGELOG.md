@@ -2,6 +2,12 @@
 
 All notable changes to the **Mobile Debug MCP** project will be documented in this file.
 
+## [0.30.1]
+- Synced the server-reported version in `src/server-core.ts` with `package.json` so contract checks pass.
+- Completed the RFC 013 wait/synchronization implementation, including scoped waits and freshness metadata.
+- Completed the RFC 014 actionability implementation for taps and adjustable controls.
+- Added regression coverage for subtree collection, scoped waits, snapshot deltas, and stale actionability checks.
+
 ## [0.30.0]
 - Folded RFC 013 synchronization semantics into the main spec and aligned the interact docs with the shipped `wait_for_ui_change` behavior.
 - Updated `wait_for_ui_change` to use a 300ms stabilization default and to reset stabilization on new in-place mutations.

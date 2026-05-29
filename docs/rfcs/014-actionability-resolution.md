@@ -34,7 +34,7 @@ RFC 014 MUST be applied AFTER RFC 005/007 resolution and BEFORE any interaction 
 
 ---
 
-# 2. Problem Statement
+# 3. Problem Statement
 
 Current interaction failures arise when actions are attempted on elements that are:
 
@@ -54,7 +54,7 @@ There is currently no single authoritative model defining when an element is saf
 
 ---
 
-# 3. Goals
+# 4. Goals
 
 The system should:
 
@@ -66,7 +66,7 @@ The system should:
 
 ---
 
-# 4. Non-Goals
+# 5. Non-Goals
 
 This RFC does NOT:
 
@@ -78,11 +78,11 @@ This RFC does NOT:
 
 ---
 
-# 5. Definition: Actionability
+# 6. Definition: Actionability
 
 An element is considered **actionable** if ALL of the following conditions are satisfied:
 
-## 5.1 Structural Validity
+## 6.1 Structural Validity
 
 - Element exists in the current UI hierarchy snapshot
 - Element identity is stable (per Richer Element Identity model)
@@ -97,23 +97,23 @@ Element identity MUST be derived using the following priority order:
 
 If identity cannot be resolved consistently across snapshots, the element MUST be treated as non-actionable due to instability.
 
-## 5.2 Visibility
+## 6.2 Visibility
 
 - Element is visible within the current viewport OR scrollable container
 - Element is not explicitly hidden (e.g. visibility = gone / hidden)
 
-## 5.3 Enabled State
+## 6.3 Enabled State
 
 - Element is not disabled
 - Element accepts interaction for the requested action type
-- Must be interpreted relative to action_type (see Section 6.4)
+- Must be interpreted relative to action_type (see Section 7.4)
 
-## 5.4 Stability Requirement
+## 6.4 Stability Requirement
 
 - UI must be in a "stable" state per RFC 013 stabilization rules
 - No synchronization-relevant mutation is currently active
 
-## 5.5 Interaction Eligibility
+## 6.5 Interaction Eligibility
 
 - Element is not in a transitional animation state that blocks interaction
 - Element is not temporarily detached or reparenting in the hierarchy
@@ -122,11 +122,11 @@ If identity cannot be resolved consistently across snapshots, the element MUST b
 
 ---
 
-# 6. Actionability Evaluation Model (Runtime Contract)
+# 7. Actionability Evaluation Model (Runtime Contract)
 
 Actionability is evaluated using runtime-provided fields from the resolved element and snapshot system.
 
-## 6.1 Predicate Definition
+## 7.1 Predicate Definition
 
 ```text
 is_actionable(element, snapshot, normalized_action_type) =
@@ -139,7 +139,7 @@ is_actionable(element, snapshot, normalized_action_type) =
   AND identity_is_stable(element)
 ```
 
-## 6.2 Field Mapping
+## 7.2 Field Mapping
 
 | Predicate Component | Source Field |
 |--------------------|-------------|
@@ -150,13 +150,13 @@ is_actionable(element, snapshot, normalized_action_type) =
 | actionability_by_type(action_type, element) | derived runtime interaction capability from visible, enabled, clickable proxy signals (no hit-test dependency) |
 | identity_is_stable | stable_id or fallback identity resolution |
 
-## 6.3 Identity Stability Rule
+## 7.3 Identity Stability Rule
 
 Identity is considered stable if `stable_id` remains unchanged across the latest two snapshots.
 
 If identity changes, the element MUST be re-resolved before actionability can be evaluated.
 
-## 6.4 Action Type Applicability (Core Contract)
+## 7.4 Action Type Applicability (Core Contract)
 
 Action type is a PRIMARY dimension of actionability and MUST be evaluated explicitly for every interaction.
 
@@ -202,7 +202,7 @@ No constraint MAY override another constraint. No priority ordering between fiel
 
 Evaluation MUST produce identical results for identical inputs (element, snapshot, action_type).
 
-## 6.5 Deterministic Evaluation Guarantees
+## 7.5 Deterministic Evaluation Guarantees
 
 Actionability evaluation is a pure function of:
 
@@ -222,7 +222,7 @@ Short-circuit evaluation is permitted for performance but MUST NOT change final 
 
 ---
 
-# 7. Resolution Lifecycle
+# 8. Resolution Lifecycle
 
 Actionability MUST be evaluated in the following sequence:
 
@@ -238,7 +238,7 @@ If any step fails, the element MUST be considered non-actionable.
 
 ---
 
-# 8. Interaction Guardrail
+# 9. Interaction Guardrail
 
 Actions MUST NOT be executed unless actionability resolution returns true.
 
@@ -250,9 +250,9 @@ If actionability is false:
 
 ---
 
-# 9. Failure Modes
+# 10. Failure Modes
 
-## 9.1 Transient Non-Actionability
+## 10.1 Transient Non-Actionability
 
 Caused by:
 
@@ -267,7 +267,7 @@ Mitigation:
 
 ---
 
-## 9.2 Stale Snapshot
+## 10.2 Stale Snapshot
 
 Caused by:
 
@@ -280,7 +280,7 @@ Mitigation:
 
 ---
 
-## 9.3 False Positives (appears actionable but is not)
+## 10.3 False Positives (appears actionable but is not)
 
 Caused by:
 
@@ -293,7 +293,7 @@ Mitigation:
 
 ---
 
-# 10. Platform Considerations
+# 11. Platform Considerations
 
 ## Android
 
@@ -307,7 +307,7 @@ Mitigation:
 
 ---
 
-# 11. Integration with RFC 013
+# 12. Integration with RFC 013
 
 Actionability Resolution depends on:
 
@@ -318,7 +318,7 @@ It MUST NOT evaluate elements from unstable snapshots.
 
 ---
 
-# 12. Telemetry
+# 13. Telemetry
 
 Systems SHOULD track:
 
@@ -329,7 +329,7 @@ Systems SHOULD track:
 
 ---
 
-# 13. Rollout Strategy
+# 14. Rollout Strategy
 
 ## Phase 1
 
@@ -347,7 +347,7 @@ The shipped interaction layer now applies iOS semantic tap eligibility in additi
 
 ---
 
-# 14. Dependencies
+# 15. Dependencies
 
 ## Depends On
 
@@ -357,7 +357,7 @@ The shipped interaction layer now applies iOS semantic tap eligibility in additi
 
 ---
 
-# 14.1 Acceptance Criteria
+# 15.1 Acceptance Criteria
 
 An implementation of RFC 014 is considered correct if:
 
@@ -368,7 +368,7 @@ An implementation of RFC 014 is considered correct if:
 - All failures produce a defined failure code
 - Actionability is only evaluated AFTER RFC 005/007 resolution
 
-# 15. Failure Codes (Actionability Gate)
+# 16. Failure Codes (Actionability Gate)
 
 ## Failure Code Derivation Matrix
 
@@ -387,7 +387,7 @@ These are the only supported actionability failure codes.
 
 Implementations SHOULD return the structured code together with a human-readable reason.
 
-# 16. Conclusion
+# 17. Conclusion
 
 Actionability Resolution provides the final gate before UI interaction execution.
 

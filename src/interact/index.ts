@@ -221,6 +221,34 @@ export class ToolsInteract {
     return null
   }
 
+  private static _resolveParentIndex(elements: UiElement[], parentId: number | string | null | undefined): number | null {
+    if (parentId === undefined || parentId === null) return null
+
+    if (typeof parentId === 'number' && Number.isInteger(parentId) && parentId >= 0 && parentId < elements.length) {
+      return parentId
+    }
+
+    if (typeof parentId === 'string') {
+      const normalized = ToolsInteract._normalize(parentId)
+      if (!normalized) return null
+
+      if (/^\d+$/.test(normalized)) {
+        const index = Number(normalized)
+        if (index >= 0 && index < elements.length) return index
+      }
+
+      const foundIndex = elements.findIndex((el) => {
+        if (!el) return false
+        return ToolsInteract._normalize(el.resourceId ?? el.resourceID ?? el.id ?? '') === normalized ||
+          ToolsInteract._normalize(el.stable_id ?? '') === normalized
+      })
+
+      return foundIndex >= 0 ? foundIndex : null
+    }
+
+    return null
+  }
+
   private static _isVisibleElement(el: UiElement): boolean {
     const bounds = ToolsInteract._normalizeBounds(el.bounds)
     return !!el.visible && !!bounds && bounds[2] > bounds[0] && bounds[3] > bounds[1]
@@ -473,7 +501,7 @@ export class ToolsInteract {
       }
 
       for (let i = 0; i < elements.length; i++) {
-        if (elements[i]?.parentId === index) {
+        if (ToolsInteract._resolveParentIndex(elements, elements[i]?.parentId) === index) {
           directChildren.add(i)
         }
       }
@@ -864,19 +892,10 @@ export class ToolsInteract {
     let safety = 0
 
     while (safety < 20 && current.el && !(current.el.clickable || current.el.focusable || ToolsInteract._isSemanticActionable(current.el)) && current.el.parentId !== undefined && current.el.parentId !== null) {
-      const parentId = current.el.parentId
-      let parentIndex: number | null = null
-
-      if (typeof parentId === 'number') parentIndex = parentId
-      else if (typeof parentId === 'string' && /^\d+$/.test(parentId)) parentIndex = Number(parentId)
+      const parentIndex = ToolsInteract._resolveParentIndex(elements, current.el.parentId)
 
       if (parentIndex !== null && elements[parentIndex]) {
         current = { el: elements[parentIndex], idx: parentIndex }
-        if (current.el.clickable || current.el.focusable || ToolsInteract._isSemanticActionable(current.el)) return current
-      } else if (typeof parentId === 'string') {
-        const foundIndex = elements.findIndex((el) => el.resourceId === parentId || el.id === parentId)
-        if (foundIndex === -1) break
-        current = { el: elements[foundIndex], idx: foundIndex }
         if (current.el.clickable || current.el.focusable || ToolsInteract._isSemanticActionable(current.el)) return current
       } else {
         break
