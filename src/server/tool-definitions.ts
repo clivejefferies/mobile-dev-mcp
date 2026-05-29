@@ -244,7 +244,7 @@ Failure Handling:
   },
   {
     name: 'capture_debug_snapshot',
-    description: 'Capture a complete debug snapshot (raw observation layer plus optional derived semantic layer). Returns structured JSON with snapshot_revision, captured_at_ms, and loading_state when detectable.',
+    description: 'Capture a complete debug snapshot (raw observation layer plus optional derived semantic layer). Returns structured JSON with snapshot_revision, captured_at_ms, snapshot_delta, and loading_state when detectable.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -295,7 +295,7 @@ Failure Handling:
   },
   {
     name: 'get_ui_tree',
-    description: 'Get the current UI hierarchy from an Android device or iOS simulator. Returns a structured JSON representation of the screen content with snapshot metadata when available.',
+    description: 'Get the current UI hierarchy from an Android device or iOS simulator. Returns a structured JSON representation of the screen content with snapshot metadata and incremental delta signals when available.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -376,11 +376,14 @@ Inputs:
 - expected_change (optional): hierarchy_diff, text_change, or state_change
 - timeout_ms (optional)
 - stability_window_ms (optional)
+- scope (optional): screen or subtree
+- target (optional): element_id when scope=subtree
 
 Guidance:
 - Prefer wait_for_screen_change for navigation transitions.
 - Prefer wait_for_ui_change for in-place mutations and non-navigation updates.
 - Use the returned snapshot_revision as the observed synchronization point when available.
+- Scoped waits return scope-aware stability metadata and a lightweight change summary.
 
 Failure Handling:
 - TIMEOUT means the UI did not change in a stable way within the allotted time.`,
@@ -390,6 +393,8 @@ Failure Handling:
         platform: { type: 'string', enum: ['android', 'ios'], description: 'Optional platform override (android|ios)' },
         deviceId: { type: 'string', description: 'Optional device id/udid to target' },
         expected_change: { type: 'string', enum: ['hierarchy_diff', 'text_change', 'state_change'], description: 'Optional type of UI change to wait for' },
+        scope: { type: 'string', enum: ['screen', 'subtree'], default: 'screen', description: 'Synchronization scope for the wait' },
+        target: { type: 'string', description: 'Target element_id when scope is subtree' },
         timeout_ms: { type: 'number', description: 'Timeout in ms to wait for change (default 60000)', default: 60000 },
         stability_window_ms: { type: 'number', description: 'How long the change must remain stable before success (default 300)', default: 300 }
       }

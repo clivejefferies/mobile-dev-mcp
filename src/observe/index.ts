@@ -358,6 +358,7 @@ export class ToolsObserve {
 
     raw.snapshot_revision = raw.ui_tree?.snapshot_revision ?? snapshotMetadata.snapshot_revision
     raw.captured_at_ms = raw.ui_tree?.captured_at_ms ?? snapshotMetadata.captured_at_ms
+    raw.snapshot_delta = raw.ui_tree?.snapshot_delta ?? snapshotMetadata.snapshot_delta ?? null
     raw.loading_state = raw.ui_tree?.loading_state ?? snapshotMetadata.loading_state
 
     const semantic = deriveSnapshotSemantic(raw)

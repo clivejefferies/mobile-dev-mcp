@@ -263,6 +263,110 @@ async function run() {
     assert.strictEqual(swipeCalls.length, 0)
     assert.ok(tapCalls[3].x > 2750, 'wide, high-range control should not be clamped to a 3% endpoint margin')
 
+    ;(Observe as any).ToolsObserve.getUITreeHandler = async () => ({
+      device: { platform: 'android', id: 'mock-device', osVersion: '14', model: 'Pixel', simulator: true },
+      screen: '',
+      resolution: { width: 1080, height: 2400 },
+      elements: [
+        {
+          text: 'Duration',
+          type: 'android.widget.SeekBar',
+          contentDescription: null,
+          clickable: true,
+          enabled: false,
+          visible: true,
+          bounds: [0, 0, 200, 40],
+          resourceId: 'seek_duration',
+          state: {
+            value: 10,
+            raw_value: 10,
+            value_range: { min: 0, max: 20 }
+          }
+        }
+      ]
+    })
+
+    const disabledAdjust = await ToolsInteract.adjustControlHandler({
+      element_id: wait.element.elementId,
+      property: 'value',
+      targetValue: 8,
+      tolerance: 0.5,
+      maxAttempts: 1,
+      platform: 'android'
+    })
+
+    assert.strictEqual(disabledAdjust.success, false)
+    assert.strictEqual(disabledAdjust.failure_code, 'ELEMENT_NOT_INTERACTABLE')
+
+    ;(Observe as any).ToolsObserve.getUITreeHandler = async () => ({
+      device: { platform: 'android', id: 'mock-device', osVersion: '14', model: 'Pixel', simulator: true },
+      screen: '',
+      resolution: { width: 1080, height: 2400 },
+      elements: [
+        {
+          text: 'Stable slider',
+          type: 'android.widget.SeekBar',
+          contentDescription: null,
+          clickable: true,
+          enabled: true,
+          visible: true,
+          bounds: [0, 0, 200, 40],
+          resourceId: 'seek_stable',
+          stable_id: 'stable-1',
+          state: {
+            value: 4,
+            raw_value: 4,
+            value_range: { min: 0, max: 10 }
+          }
+        }
+      ]
+    })
+
+    const stableWait = await ToolsInteract.waitForUIHandler({
+      selector: { text: 'Stable slider' },
+      condition: 'clickable',
+      timeout_ms: 200,
+      poll_interval_ms: 50,
+      platform: 'android'
+    })
+    assert.strictEqual(stableWait.status, 'success')
+
+    ;(Observe as any).ToolsObserve.getUITreeHandler = async () => ({
+      device: { platform: 'android', id: 'mock-device', osVersion: '14', model: 'Pixel', simulator: true },
+      screen: '',
+      resolution: { width: 1080, height: 2400 },
+      elements: [
+        {
+          text: 'Stable slider',
+          type: 'android.widget.SeekBar',
+          contentDescription: null,
+          clickable: true,
+          enabled: true,
+          visible: true,
+          bounds: [0, 0, 200, 40],
+          resourceId: 'seek_stable',
+          stable_id: 'stable-2',
+          state: {
+            value: 4,
+            raw_value: 4,
+            value_range: { min: 0, max: 10 }
+          }
+        }
+      ]
+    })
+
+    const staleAdjust = await ToolsInteract.adjustControlHandler({
+      element_id: stableWait.element.elementId,
+      property: 'value',
+      targetValue: 6,
+      tolerance: 0.5,
+      maxAttempts: 1,
+      platform: 'android'
+    })
+
+    assert.strictEqual(staleAdjust.success, false)
+    assert.strictEqual(staleAdjust.failure_code, 'STALE_REFERENCE')
+
     let treeFetches = 0
     let retryVerificationCount = 0
     ;(Observe as any).ToolsObserve.getUITreeHandler = async () => {
