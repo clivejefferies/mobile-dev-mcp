@@ -86,6 +86,77 @@ async function run() {
 
     ;(Observe as any).ToolsObserve.getUITreeHandler = async () => ({
       device: { platform: 'android', id: 'mock-device' },
+      elements: [
+        { text: 'Plain label', resourceId: 'txt_plain', bounds: [0, 0, 20, 20], visible: true, enabled: true, clickable: false }
+      ]
+    })
+    const waitPlain = await ToolsInteract.waitForUIHandler({
+      selector: { text: 'Plain label' },
+      condition: 'exists',
+      timeout_ms: 200,
+      poll_interval_ms: 50,
+      platform: 'android'
+    })
+    const plainResult = await ToolsInteract.tapElementHandler({ elementId: waitPlain.element.elementId })
+    assert.strictEqual(plainResult.success, false)
+    assert.strictEqual(plainResult.failure_code, 'ELEMENT_NOT_INTERACTABLE')
+
+    ;(Observe as any).ToolsObserve.getUITreeHandler = async () => ({
+      device: { platform: 'ios', id: 'ios-mock' },
+      elements: [
+        {
+          text: 'Semantic tap',
+          resourceId: 'ios_semantic_tap',
+          bounds: [10, 10, 30, 30],
+          visible: true,
+          enabled: true,
+          clickable: false,
+          semantic: {
+            is_clickable: true,
+            is_container: false,
+            supported_actions: ['tap']
+          }
+        }
+      ]
+    })
+    const iosSemanticWait = await ToolsInteract.waitForUIHandler({
+      selector: { text: 'Semantic tap' },
+      condition: 'exists',
+      timeout_ms: 200,
+      poll_interval_ms: 50,
+      platform: 'ios'
+    })
+    const iosSemanticTap = await ToolsInteract.tapElementHandler({ elementId: iosSemanticWait.element.elementId })
+    assert.strictEqual(iosSemanticTap.success, true)
+    assert.strictEqual(iosSemanticTap.target.resolved?.elementId, iosSemanticWait.element.elementId)
+    assert.deepStrictEqual(tapped, { platform: 'ios', x: 20, y: 20, deviceId: 'ios-mock' })
+
+    ;(Observe as any).ToolsObserve.getUITreeHandler = async () => ({
+      device: { platform: 'android', id: 'mock-device' },
+      elements: [
+        { text: 'Stable target', resourceId: 'btn_stable', bounds: [0, 0, 20, 20], visible: true, enabled: true, clickable: true, stable_id: 'stable-1' }
+      ]
+    })
+    const waitStable = await ToolsInteract.waitForUIHandler({
+      selector: { text: 'Stable target' },
+      condition: 'exists',
+      timeout_ms: 200,
+      poll_interval_ms: 50,
+      platform: 'android'
+    })
+
+    ;(Observe as any).ToolsObserve.getUITreeHandler = async () => ({
+      device: { platform: 'android', id: 'mock-device' },
+      elements: [
+        { text: 'Stable target', resourceId: 'btn_stable', bounds: [0, 0, 20, 20], visible: true, enabled: true, clickable: true, stable_id: 'stable-2' }
+      ]
+    })
+    const stableMismatchResult = await ToolsInteract.tapElementHandler({ elementId: waitStable.element.elementId })
+    assert.strictEqual(stableMismatchResult.success, false)
+    assert.strictEqual(stableMismatchResult.failure_code, 'STALE_REFERENCE')
+
+    ;(Observe as any).ToolsObserve.getUITreeHandler = async () => ({
+      device: { platform: 'android', id: 'mock-device' },
       elements: []
     })
     const notFoundResult = await ToolsInteract.tapElementHandler({ elementId: successElementId })

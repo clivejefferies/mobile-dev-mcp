@@ -43,6 +43,7 @@ interface UiElement {
   focusable?: boolean
   visible?: boolean
   parentId?: number | string | null
+  children?: number[]
   _index?: number
   _interactable?: boolean
   _sliderLike?: boolean
@@ -60,6 +61,7 @@ interface ResolvedUiElementContext {
   deviceId?: string
   bounds: [number, number, number, number] | null
   index: number
+  stable_id?: string | null
 }
 
 interface UiResolution {
@@ -71,6 +73,24 @@ interface UiChangeSignatureSet {
   hierarchy: string | null
   text: string | null
   state: string | null
+}
+
+interface UiChangeScopeResolution {
+  scope: 'screen' | 'subtree'
+  target: string | null
+  resolved: boolean
+  resolvedIndex: number | null
+  resolvedStableId: string | null
+  reason: string
+}
+
+interface UiChangeScopeResult {
+  elements: UiElement[]
+  resolution: UiChangeScopeResolution
+  error?: {
+    code: 'INVALID_SCOPE' | 'ELEMENT_NOT_FOUND'
+    message: string
+  }
 }
 
 interface RankedResolutionCandidate {
@@ -206,6 +226,55 @@ export class ToolsInteract {
     return !!el.visible && !!bounds && bounds[2] > bounds[0] && bounds[3] > bounds[1]
   }
 
+  private static _isTapActionable(
+    el: UiElement,
+    storedStableId?: string | null,
+    platform?: 'android' | 'ios'
+  ): { actionable: boolean, failureCode?: ActionFailureCode, reason?: string } {
+    if (!ToolsInteract._isVisibleElement(el)) {
+      return { actionable: false, failureCode: 'ELEMENT_NOT_INTERACTABLE', reason: 'element is not visible' }
+    }
+
+    if (el.enabled === false) {
+      return { actionable: false, failureCode: 'ELEMENT_NOT_INTERACTABLE', reason: 'element is disabled' }
+    }
+
+    const semanticTapActionable = !!el.semantic && (
+      el.semantic.is_clickable ||
+      (Array.isArray(el.semantic.supported_actions) && el.semantic.supported_actions.some((action) => ToolsInteract._normalize(action) === 'tap'))
+    )
+
+    if (!el.clickable && !(platform === 'ios' && semanticTapActionable)) {
+      return { actionable: false, failureCode: 'ELEMENT_NOT_INTERACTABLE', reason: 'element is not clickable' }
+    }
+
+    if (storedStableId) {
+      if (!el.stable_id || el.stable_id !== storedStableId) {
+        return { actionable: false, failureCode: 'STALE_REFERENCE', reason: 'element stable_id changed' }
+      }
+    }
+
+    return { actionable: true }
+  }
+
+  private static _isAdjustableActionable(el: UiElement, storedStableId?: string | null): { actionable: boolean, failureCode?: ActionFailureCode, reason?: string } {
+    if (!ToolsInteract._isVisibleElement(el)) {
+      return { actionable: false, failureCode: 'ELEMENT_NOT_INTERACTABLE', reason: 'element is not visible' }
+    }
+
+    if (el.enabled === false) {
+      return { actionable: false, failureCode: 'ELEMENT_NOT_INTERACTABLE', reason: 'element is disabled' }
+    }
+
+    if (storedStableId) {
+      if (!el.stable_id || el.stable_id !== storedStableId) {
+        return { actionable: false, failureCode: 'STALE_REFERENCE', reason: 'element stable_id changed' }
+      }
+    }
+
+    return { actionable: true }
+  }
+
   private static _computeElementId(platform: 'android' | 'ios', deviceId: string | undefined, el: UiElement, index: number): string {
     const identity = {
       platform,
@@ -229,7 +298,8 @@ export class ToolsInteract {
       platform,
       deviceId,
       bounds,
-      index
+      index,
+      stable_id: el.stable_id ?? null
     })
 
     return {
@@ -246,6 +316,235 @@ export class ToolsInteract {
       test_tag: el.test_tag ?? null,
       selector: el.selector ?? null,
       semantic: el.semantic ?? null
+    }
+  }
+
+  private static _resolveUiChangeScope(
+    tree: any,
+    scope: 'screen' | 'subtree' | undefined,
+    target: string | null | undefined
+  ): UiChangeScopeResult {
+    const elements = Array.isArray(tree?.elements) ? tree.elements as UiElement[] : []
+    const normalizedScope = scope === 'subtree' ? 'subtree' : 'screen'
+
+    if (normalizedScope === 'screen') {
+      return {
+        elements,
+        resolution: {
+          scope: 'screen',
+          target: null,
+          resolved: true,
+          resolvedIndex: null,
+          resolvedStableId: null,
+          reason: 'screen scope'
+        }
+      }
+    }
+
+    const requestedTarget = typeof target === 'string' && target.trim().length > 0 ? target.trim() : null
+    if (!requestedTarget) {
+      return {
+        elements: [],
+        resolution: {
+          scope: 'subtree',
+          target: null,
+          resolved: false,
+          resolvedIndex: null,
+          resolvedStableId: null,
+          reason: 'subtree scope requires a target element id'
+        },
+        error: {
+          code: 'INVALID_SCOPE',
+          message: 'scope=subtree requires a target element_id'
+        }
+      }
+    }
+
+    const resolved = ToolsInteract._findScopedElement(tree, requestedTarget)
+    if (!resolved) {
+      return {
+        elements: [],
+        resolution: {
+          scope: 'subtree',
+          target: requestedTarget,
+          resolved: false,
+          resolvedIndex: null,
+          resolvedStableId: null,
+          reason: 'target element could not be resolved'
+        },
+        error: {
+          code: 'ELEMENT_NOT_FOUND',
+          message: `Target element ${requestedTarget} could not be resolved for subtree scope`
+        }
+      }
+    }
+
+    const subtreeIndices = ToolsInteract._collectSubtreeIndices(elements, resolved.index)
+    const scopedElements = subtreeIndices.map((index) => elements[index]).filter((element): element is UiElement => !!element)
+
+    return {
+      elements: scopedElements,
+      resolution: {
+        scope: 'subtree',
+        target: requestedTarget,
+        resolved: true,
+        resolvedIndex: resolved.index,
+        resolvedStableId: resolved.stableId,
+        reason: resolved.reason
+      }
+    }
+  }
+
+  private static _findScopedElement(tree: any, targetElementId: string): { index: number, stableId: string | null, reason: string } | null {
+    const elements = Array.isArray(tree?.elements) ? tree.elements as UiElement[] : []
+    const platform = tree?.device?.platform === 'ios' ? 'ios' : 'android'
+    const deviceId = tree?.device?.id ?? undefined
+    const normalizedTarget = ToolsInteract._normalize(targetElementId)
+
+    for (let i = 0; i < elements.length; i++) {
+      const el = elements[i]
+      if (!el) continue
+
+      const computedElementId = ToolsInteract._computeElementId(platform, deviceId, el, i)
+      if (computedElementId === targetElementId) {
+        return {
+          index: i,
+          stableId: el.stable_id ?? null,
+          reason: 'element_id_match'
+        }
+      }
+    }
+
+    for (let i = 0; i < elements.length; i++) {
+      const el = elements[i]
+      if (!el) continue
+
+      if (el.stable_id && ToolsInteract._normalize(el.stable_id) === normalizedTarget) {
+        return {
+          index: i,
+          stableId: el.stable_id,
+          reason: 'stable_id_match'
+        }
+      }
+    }
+
+    const storedContext = ToolsInteract._resolvedUiElements.get(targetElementId)
+    if (storedContext?.stable_id) {
+      const normalizedStoredStableId = ToolsInteract._normalize(storedContext.stable_id)
+      for (let i = 0; i < elements.length; i++) {
+        const el = elements[i]
+        if (!el?.stable_id) continue
+        if (ToolsInteract._normalize(el.stable_id) === normalizedStoredStableId) {
+          return {
+            index: i,
+            stableId: el.stable_id,
+            reason: 'stored_stable_id_match'
+          }
+        }
+      }
+    }
+
+    return null
+  }
+
+  private static _collectSubtreeIndices(elements: UiElement[], rootIndex: number): number[] {
+    if (!Array.isArray(elements) || rootIndex < 0 || rootIndex >= elements.length) return []
+
+    const visited = new Set<number>()
+    const stack = [rootIndex]
+    const result: number[] = []
+
+    while (stack.length > 0) {
+      const index = stack.pop()
+      if (index === undefined || visited.has(index) || index < 0 || index >= elements.length) continue
+      visited.add(index)
+      result.push(index)
+
+      const element = elements[index]
+      if (!element) continue
+
+      const directChildren = new Set<number>()
+      if (Array.isArray(element.children)) {
+        for (const childIndex of element.children) {
+          if (typeof childIndex === 'number' && Number.isInteger(childIndex) && childIndex >= 0 && childIndex < elements.length) {
+            directChildren.add(childIndex)
+          }
+        }
+      }
+
+      for (let i = 0; i < elements.length; i++) {
+        if (elements[i]?.parentId === index) {
+          directChildren.add(i)
+        }
+      }
+
+      for (const childIndex of directChildren) {
+        if (!visited.has(childIndex)) stack.push(childIndex)
+      }
+    }
+
+    return result.sort((left, right) => left - right)
+  }
+
+  private static _changeIdentityForElement(el: UiElement, index: number): string {
+    const stableId = ToolsInteract._normalize(el.stable_id)
+    if (stableId) return `stable:${stableId}`
+
+    return `fallback:${ToolsInteract._hash({
+      text: ToolsInteract._normalize(el.text ?? el.label ?? el.value ?? ''),
+      contentDescription: ToolsInteract._normalize(el.contentDescription ?? el.contentDesc ?? el.accessibilityLabel ?? ''),
+      resourceId: ToolsInteract._normalize(el.resourceId ?? el.resourceID ?? el.id ?? ''),
+      type: ToolsInteract._normalize(el.type ?? el.class ?? ''),
+      bounds: ToolsInteract._normalizeBounds(el.bounds) ?? [0, 0, 0, 0],
+      index
+    })}`
+  }
+
+  private static _summarizeUiChangeDelta(initialElements: UiElement[], currentElements: UiElement[]) {
+    const buildMap = (elements: UiElement[]) => {
+      const map = new Map<string, string>()
+      for (let i = 0; i < elements.length; i++) {
+        const element = elements[i]
+        if (!element) continue
+        const key = ToolsInteract._changeIdentityForElement(element, i)
+        map.set(key, ToolsInteract._hash({
+          text: ToolsInteract._normalize(element.text ?? element.label ?? element.value ?? ''),
+          contentDescription: ToolsInteract._normalize(element.contentDescription ?? element.contentDesc ?? element.accessibilityLabel ?? ''),
+          resourceId: ToolsInteract._normalize(element.resourceId ?? element.resourceID ?? element.id ?? ''),
+          type: ToolsInteract._normalize(element.type ?? element.class ?? ''),
+          bounds: ToolsInteract._normalizeBounds(element.bounds) ?? [0, 0, 0, 0],
+          state: element.state ?? null,
+          visible: !!element.visible,
+          enabled: !!element.enabled,
+          clickable: !!element.clickable
+        }))
+      }
+      return map
+    }
+
+    const initialMap = buildMap(initialElements)
+    const currentMap = buildMap(currentElements)
+    let added = 0
+    let removed = 0
+    let mutated = 0
+
+    for (const [key, value] of currentMap.entries()) {
+      if (!initialMap.has(key)) {
+        added++
+      } else if (initialMap.get(key) !== value) {
+        mutated++
+      }
+    }
+
+    for (const key of initialMap.keys()) {
+      if (!currentMap.has(key)) removed++
+    }
+
+    return {
+      total_elements: currentElements.length,
+      added_elements: added,
+      removed_elements: removed,
+      mutated_elements: mutated
     }
   }
 
@@ -718,12 +1017,16 @@ export class ToolsInteract {
 
     const resolvedTarget = ToolsInteract._resolvedTargetFromElement(resolved.elementId, currentMatch.el, currentMatch.index)
 
-    if (!ToolsInteract._isVisibleElement(currentMatch.el)) {
-      return ToolsInteract._actionFailure(actionType, selector, resolvedTarget, 'ELEMENT_NOT_INTERACTABLE', true, fingerprintBefore)
-    }
-
-    if (currentMatch.el.enabled === false) {
-      return ToolsInteract._actionFailure(actionType, selector, resolvedTarget, 'ELEMENT_NOT_INTERACTABLE', true, fingerprintBefore)
+    const tapActionability = ToolsInteract._isTapActionable(currentMatch.el, resolved.stable_id, resolved.platform)
+    if (!tapActionability.actionable) {
+      return ToolsInteract._actionFailure(
+        actionType,
+        selector,
+        resolvedTarget,
+        tapActionability.failureCode ?? 'ELEMENT_NOT_INTERACTABLE',
+        true,
+        fingerprintBefore
+      )
     }
 
     const bounds = ToolsInteract._normalizeBounds(currentMatch.el.bounds) ?? resolved.bounds
@@ -779,6 +1082,7 @@ export class ToolsInteract {
     const sourcePlatform: 'android' | 'ios' = platform || 'android'
     let resolvedPlatform = sourcePlatform
     let resolvedDeviceId = deviceId
+    const storedResolvedTarget = element_id ? ToolsInteract._resolvedUiElements.get(element_id) ?? null : null
     const fingerprintBefore = await ToolsInteract._captureFingerprint(resolvedPlatform, resolvedDeviceId)
     let semanticFallbackElement: FindElementResponse['element'] | null = null
     const traceSteps: TraceStep[] = []
@@ -1062,6 +1366,21 @@ export class ToolsInteract {
       resolvedTarget = resolved.resolvedTarget
       const currentEl: UiElement = resolved.match.el
       cachedResolvedMatch = resolved.match
+
+      const adjustableActionability = ToolsInteract._isAdjustableActionable(currentEl, storedResolvedTarget?.stable_id)
+      if (!adjustableActionability.actionable) {
+        return buildFailure(
+          adjustableActionability.failureCode ?? 'ELEMENT_NOT_INTERACTABLE',
+          adjustableActionability.reason ?? 'adjustable control is not actionable',
+          resolvedTarget,
+          currentDevice,
+          lastObservedState,
+          attemptCount,
+          lastAdjustmentMode,
+          true
+        )
+      }
+
       const bounds = ToolsInteract._normalizeBounds(currentEl.bounds)
       const valueRange = currentEl.state?.value_range ?? null
       const currentValue = ToolsInteract._readNumericControlValue(currentEl, property)
@@ -2021,33 +2340,79 @@ export class ToolsInteract {
     deviceId,
     timeout_ms = 60000,
     stability_window_ms = 300,
-    expected_change
+    expected_change,
+    scope = 'screen',
+    target = null
   }: {
     platform?: 'android' | 'ios',
     deviceId?: string,
     timeout_ms?: number,
     stability_window_ms?: number,
-    expected_change?: 'hierarchy_diff' | 'text_change' | 'state_change'
+    expected_change?: 'hierarchy_diff' | 'text_change' | 'state_change',
+    scope?: 'screen' | 'subtree',
+    target?: string | null
   }): Promise<WaitForUIChangeResponse> {
     const start = Date.now()
     const pollIntervalMs = 300
     const stabilityWindow = Math.max(0, typeof stability_window_ms === 'number' ? stability_window_ms : 300)
     let baseline: UiChangeSignatureSet | null = null
+    let baselineScope: UiChangeScopeResult | null = null
     let lastObservedRevision: number | null = null
     let lastLoadingState: any = null
+    let lastSnapshotFreshnessMs: number | null = null
     let candidateSignatures: UiChangeSignatureSet | null = null
     let candidateObservedChange: 'hierarchy_diff' | 'text_change' | 'state_change' | null = null
     let candidateSinceMs: number | null = null
+    let lastChangeSummary: ReturnType<typeof ToolsInteract._summarizeUiChangeDelta> | null = null
+    let lastScopeResolution: UiChangeScopeResolution = {
+      scope: scope === 'subtree' ? 'subtree' : 'screen',
+      target: target && typeof target === 'string' ? target : null,
+      resolved: scope !== 'subtree',
+      resolvedIndex: null,
+      resolvedStableId: null,
+      reason: scope === 'subtree' ? 'target not resolved yet' : 'screen scope'
+    }
 
     while (Date.now() - start < timeout_ms) {
       try {
         const tree = await ToolsObserve.getUITreeHandler({ platform, deviceId }) as any
-        const signatures = ToolsInteract._buildUiChangeSignatures(tree)
+        const scopedTree = ToolsInteract._resolveUiChangeScope(tree, scope, target)
+        if (scopedTree.error) {
+          lastScopeResolution = scopedTree.resolution
+          return {
+            success: false,
+            observed_change: null,
+            snapshot_revision: typeof tree?.snapshot_revision === 'number' ? tree.snapshot_revision : lastObservedRevision ?? undefined,
+            snapshot_freshness_ms: typeof tree?.captured_at_ms === 'number' ? Math.max(0, Date.now() - tree.captured_at_ms) : lastSnapshotFreshnessMs ?? null,
+            timeout: true,
+            elapsed_ms: Date.now() - start,
+            expected_change,
+            loading_state: tree?.loading_state ?? lastLoadingState ?? null,
+            scope: scopedTree.resolution.scope,
+            target: scopedTree.resolution.target,
+            stability_state: 'transient',
+            change_summary: lastChangeSummary,
+            reason: scopedTree.error.message,
+            error: scopedTree.error
+          }
+        }
+
+        const scopedElements = scopedTree.elements
+        const scopedSignatureTree = {
+          ...tree,
+          elements: scopedElements
+        }
+        const signatures = ToolsInteract._buildUiChangeSignatures(scopedSignatureTree)
         lastObservedRevision = typeof tree?.snapshot_revision === 'number' ? tree.snapshot_revision : lastObservedRevision
         lastLoadingState = tree?.loading_state ?? lastLoadingState
+        lastSnapshotFreshnessMs = typeof tree?.captured_at_ms === 'number' ? Math.max(0, Date.now() - tree.captured_at_ms) : lastSnapshotFreshnessMs
+        lastChangeSummary = baseline ? ToolsInteract._summarizeUiChangeDelta((baselineScope?.elements ?? []), scopedElements) : lastChangeSummary
+        lastScopeResolution = scopedTree.resolution
+        baselineScope = baselineScope ?? scopedTree
 
         if (!baseline) {
           baseline = signatures
+          baselineScope = scopedTree
         } else {
           const observedChange = ToolsInteract._matchesUiChange(expected_change, baseline, signatures)
           if (observedChange) {
@@ -2059,20 +2424,25 @@ export class ToolsInteract {
 
             const stableForMs = candidateSinceMs === null ? 0 : Date.now() - candidateSinceMs
             if (stabilityWindow === 0 || stableForMs >= stabilityWindow) {
-              return {
-                success: true,
-                observed_change: candidateObservedChange ?? observedChange,
-                snapshot_revision: lastObservedRevision ?? undefined,
-                timeout: false,
-                elapsed_ms: Date.now() - start,
-                expected_change,
-                loading_state: lastLoadingState ?? null,
-                reason: 'UI change observed'
+                return {
+                  success: true,
+                  observed_change: candidateObservedChange ?? observedChange,
+                  snapshot_revision: lastObservedRevision ?? undefined,
+                  snapshot_freshness_ms: lastSnapshotFreshnessMs ?? null,
+                  timeout: false,
+                  elapsed_ms: Date.now() - start,
+                  expected_change,
+                  loading_state: lastLoadingState ?? null,
+                  scope: lastScopeResolution.scope,
+                  target: lastScopeResolution.target,
+                  stability_state: 'stable',
+                  change_summary: lastChangeSummary,
+                  reason: 'UI change observed'
+                }
               }
-            }
-          } else {
-            candidateSignatures = null
-            candidateObservedChange = null
+            } else {
+              candidateSignatures = null
+              candidateObservedChange = null
             candidateSinceMs = null
           }
         }
@@ -2087,10 +2457,15 @@ export class ToolsInteract {
       success: false,
       observed_change: null,
       snapshot_revision: lastObservedRevision ?? undefined,
+      snapshot_freshness_ms: lastSnapshotFreshnessMs ?? null,
       timeout: true,
       elapsed_ms: Date.now() - start,
       expected_change,
       loading_state: lastLoadingState ?? null,
+      scope: lastScopeResolution.scope,
+      target: lastScopeResolution.target,
+      stability_state: 'transient',
+      change_summary: lastChangeSummary,
       reason: 'timeout'
     }
   }

@@ -1,9 +1,10 @@
 import crypto from 'crypto'
-import type { GetUITreeResponse, LoadingState, UIElement } from '../types.js'
+import type { GetUITreeResponse, LoadingState, SnapshotDelta, UIElement } from '../types.js'
 
 interface SnapshotState {
   revision: number
   signature: string | null
+  elementSignatures: Map<string, string>
 }
 
 const snapshotStateByDevice = new Map<string, SnapshotState>()
@@ -35,6 +36,63 @@ function stableElementSignature(element: UIElement) {
     visible: !!element.visible,
     state: element.state ?? null,
     bounds: normalizeBounds(element.bounds)
+  }
+}
+
+function stableElementIdentity(element: UIElement, index: number) {
+  const stableId = normalize(element.stable_id)
+  if (stableId) return `stable:${stableId}`
+
+  return `fallback:${crypto.createHash('sha1').update(JSON.stringify({
+    text: normalize(element.text),
+    contentDescription: normalize(element.contentDescription),
+    resourceId: normalize(element.resourceId),
+    type: normalize(element.type),
+    bounds: normalizeBounds(element.bounds),
+    index
+  })).digest('hex')}`
+}
+
+function buildElementSignatures(tree: Pick<GetUITreeResponse, 'elements'> | null | undefined) {
+  const signatures = new Map<string, string>()
+  const elements = Array.isArray(tree?.elements) ? tree!.elements! : []
+
+  for (let index = 0; index < elements.length; index++) {
+    const element = elements[index]
+    if (!element) continue
+    const identity = stableElementIdentity(element, index)
+    signatures.set(identity, crypto.createHash('sha1').update(JSON.stringify(stableElementSignature(element))).digest('hex'))
+  }
+
+  return signatures
+}
+
+function summarizeSnapshotDelta(previous: SnapshotState | undefined, currentElements: Map<string, string>): SnapshotDelta | null {
+  if (!previous) return null
+
+  let added = 0
+  let removed = 0
+  let mutated = 0
+
+  for (const [identity, signature] of currentElements.entries()) {
+    const previousSignature = previous.elementSignatures.get(identity)
+    if (previousSignature === undefined) {
+      added++
+    } else if (previousSignature !== signature) {
+      mutated++
+    }
+  }
+
+  for (const identity of previous.elementSignatures.keys()) {
+    if (!currentElements.has(identity)) removed++
+  }
+
+  return {
+    previous_snapshot_revision: previous.revision,
+    added_elements: added,
+    removed_elements: removed,
+    mutated_elements: mutated,
+    total_elements: currentElements.size
   }
 }
 
@@ -83,6 +141,10 @@ export function deriveSnapshotMetadata(
 ) {
   const signature = signatureOverride ?? computeSnapshotSignature(tree)
   const previous = snapshotStateByDevice.get(deviceKey)
+  const hasValidTree = !!tree && !tree.error
+  const currentElementSignatures = hasValidTree
+    ? buildElementSignatures(tree)
+    : previous?.elementSignatures ?? new Map<string, string>()
 
   let revision = 1
   if (previous) {
@@ -93,11 +155,16 @@ export function deriveSnapshotMetadata(
     }
   }
 
-  snapshotStateByDevice.set(deviceKey, { revision, signature })
+  snapshotStateByDevice.set(deviceKey, {
+    revision,
+    signature,
+    elementSignatures: currentElementSignatures
+  })
 
   return {
     snapshot_revision: revision,
     captured_at_ms: Date.now(),
+    snapshot_delta: hasValidTree ? summarizeSnapshotDelta(previous, currentElementSignatures) : null,
     loading_state: detectLoadingState(tree, source)
   }
 }

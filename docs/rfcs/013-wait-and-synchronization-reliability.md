@@ -283,26 +283,13 @@ wait_for_ui_change({
   deviceId?: string,
   timeout_ms?: number,
   stability_window_ms?: number,
-  expected_change?: string
+  expected_change?: string,
+  scope?: "screen" | "subtree",
+  target?: string
 })
 ```
 
-### Proposed Future Extensions
-
-The following fields are proposed extensions and are not currently part of the shipped contract:
-
-```json
-{
-  "scope": "screen" | "subtree",
-  "target": "element_id"
-}
-```
-
-These extensions are illustrative and intended to support:
-
-- subtree synchronization
-- scoped convergence
-- token-efficient synchronization
+`scope=subtree` requires a target `element_id` and narrows synchronization to the resolved element subtree.
 
 ### Semantics
 
@@ -512,17 +499,12 @@ The current implementation exposes:
  - `snapshot_revision`
  - `captured_at_ms`
  - advisory `loading_state`
+ - `scope` and `target` on wait responses
+ - `stability_state` and scoped `change_summary` on wait responses
 
 The `loading_state` field is currently an advisory structured object rather than a simple enum value.
 
-The implementation does not currently expose explicit freshness states such as:
-
-- `fresh`
-- `stale`
-- `transient`
-- `stable`
-
-Those concepts in this RFC describe synchronization semantics rather than currently shipped payload fields.
+Wait responses also include a `snapshot_freshness_ms` age value so callers can reason about freshness without inferring it from revision numbers alone.
 
 ### Requirements
 
@@ -533,15 +515,7 @@ Those concepts in this RFC describe synchronization semantics rather than curren
 
 ### Proposed Stability States
 
-Future implementations may expose explicit synchronization stability states.
-
-Potential states include:
-
-- `transient`
-- `stabilizing`
-- `stable`
-
-These are not currently emitted by the shipped implementation.
+The shipped implementation emits `transient` while a wait is still converging and `stable` once the stabilization window has completed.
 
 ---
 
@@ -586,6 +560,8 @@ Examples:
 - improve synchronization latency
 - improve Compose hierarchy handling
 
+The shipped runtime exposes scope-aware waits and snapshot delta summaries on UI tree and debug snapshot responses to keep this signal lightweight.
+
 ---
 
 ## 7.5 Incremental Snapshot Delivery
@@ -598,6 +574,8 @@ Example capabilities:
 - subtree invalidation
 - partial hierarchy refreshes
 - revision patch delivery
+
+The shipped runtime currently exposes revision-aware `snapshot_delta` metadata rather than transport-level patch payloads.
 
 ### Dependency
 
@@ -825,6 +803,8 @@ Introduce:
 - incremental snapshot delivery
 - diff-based synchronization
 - subtree invalidation
+
+The runtime now exposes scoped diff summaries for waits, but full partial-hierarchy patch delivery remains a future protocol extension.
 
 ---
 

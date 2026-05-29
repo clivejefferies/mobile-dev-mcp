@@ -152,6 +152,14 @@ export interface LoadingState {
   source: string;
 }
 
+export interface SnapshotDelta {
+  previous_snapshot_revision: number | null;
+  added_elements: number;
+  removed_elements: number;
+  mutated_elements: number;
+  total_elements: number;
+}
+
 export interface CaptureAndroidScreenResponse {
   device: DeviceInfo;
   screenshot: string; // base64 encoded string
@@ -207,6 +215,7 @@ export interface GetUITreeResponse {
   elements: UIElement[];
   snapshot_revision: number;
   captured_at_ms: number;
+  snapshot_delta?: SnapshotDelta | null;
   loading_state?: LoadingState | null;
   error?: string;
 }
@@ -231,6 +240,7 @@ export interface CaptureDebugSnapshotRawResponse {
   timestamp: number;
   snapshot_revision: number;
   captured_at_ms: number;
+  snapshot_delta?: SnapshotDelta | null;
   reason: string;
   activity: string | null;
   fingerprint: string | null;
@@ -497,11 +507,25 @@ export interface WaitForUIChangeResponse {
   success: boolean;
   observed_change: 'hierarchy_diff' | 'text_change' | 'state_change' | null;
   snapshot_revision?: number;
+  snapshot_freshness_ms?: number | null;
+  scope?: 'screen' | 'subtree';
+  target?: string | null;
+  stability_state?: 'transient' | 'stable';
+  change_summary?: {
+    total_elements: number;
+    added_elements: number;
+    removed_elements: number;
+    mutated_elements: number;
+  } | null;
   timeout: boolean;
   elapsed_ms: number;
   expected_change?: 'hierarchy_diff' | 'text_change' | 'state_change';
   reason?: string;
   loading_state?: LoadingState | null;
+  error?: {
+    code: 'INVALID_SCOPE' | 'ELEMENT_NOT_FOUND';
+    message: string;
+  };
 }
 
 export interface SwipeResponse {
