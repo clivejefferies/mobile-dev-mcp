@@ -391,7 +391,7 @@ Failure Handling:
         deviceId: { type: 'string', description: 'Optional device id/udid to target' },
         expected_change: { type: 'string', enum: ['hierarchy_diff', 'text_change', 'state_change'], description: 'Optional type of UI change to wait for' },
         timeout_ms: { type: 'number', description: 'Timeout in ms to wait for change (default 60000)', default: 60000 },
-        stability_window_ms: { type: 'number', description: 'How long the change must remain stable before success (default 250)', default: 250 }
+        stability_window_ms: { type: 'number', description: 'How long the change must remain stable before success (default 300)', default: 300 }
       }
     }
   },

@@ -319,7 +319,7 @@ async function handleWaitForUIChange(args: ToolCallArgs) {
   const platform = getStringArg(args, 'platform') as PlatformArg | undefined
   const deviceId = getStringArg(args, 'deviceId')
   const timeout_ms = getNumberArg(args, 'timeout_ms') ?? 60000
-  const stability_window_ms = getNumberArg(args, 'stability_window_ms') ?? 250
+  const stability_window_ms = getNumberArg(args, 'stability_window_ms') ?? 300
   const expected_change = getStringArg(args, 'expected_change') as 'hierarchy_diff' | 'text_change' | 'state_change' | undefined
   const res = await ToolsInteract.waitForUIChangeHandler({ platform, deviceId, timeout_ms, stability_window_ms, expected_change })
   return wrapResponse(res)

@@ -182,6 +182,12 @@ Capabilities:
 - waits for hierarchy, text, or state deltas
 - uses snapshot revision metadata when available
 - confirms the change remains stable before returning success
+- defaults `stability_window_ms` to `300`
+
+Mutation rules:
+
+- synchronization-relevant: element addition or removal, visibility changes, enabled-state changes, navigation transitions, text or content-description changes, subtree structure mutation, semantic accessibility tree mutation
+- not synchronization-relevant: animation frame updates, layout-only jitter, opacity-only visual transitions, non-semantic rendering updates
 
 Guidance:
 

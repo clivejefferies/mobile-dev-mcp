@@ -48,10 +48,10 @@ Higher task success with fewer retries.
 - Better Compose / Custom Control Semantics — Complete (Semantic role enrichment and custom-adjustable inference shipped)
 - Verification Stabilization and Temporal Convergence — Complete (Temporal verification and convergence logic shipped)
 - Action Trace and Execution Observability — Complete (Structured execution trace model shipped)
+- Wait and Synchronization Reliability — Complete (RFC 013 folded into the main spec and shipped behavior verified on emulator)
 
 ## Current Focus
 
-- Wait and Synchronization Reliability (implementation + tuning)
 - Actionability Resolution
 - Adjustable Control Precision Hardening
 
@@ -75,13 +75,14 @@ Addresses friction around:
 - environment drift across machines
 - setup failures blocking first use
 
-## Scope
 - Automatic discovery of adb
 - Automatic discovery of xcrun
 - idb detection and guided bootstrap support
 - Startup toolchain validation
 - Environment health diagnostics / doctor-style checks
 - Minimal-manual-configuration defaults
+- Runtime device/emulator health signals (crash detection, process lifecycle awareness)
+- App stability monitoring during active sessions
 
 ## Expected Impact
 High.
@@ -98,6 +99,7 @@ High.
 - Lower environment configuration failures
 - Faster time-to-first-successful-session
 - Reduced support/debugging caused by local setup issues
+- Reduced unknown-failure sessions caused by app or emulator instability
 
 ## Dependencies
 Depends on:
@@ -152,7 +154,7 @@ Very high.
 Blocks or strengthens:
 - Better Compose / Custom Control Semantics
 - Pinch to Zoom
-- Action Trace Correlation
+- Advanced Trace Correlation and Analysis
 
 ---
 
@@ -213,7 +215,8 @@ Addresses failures where agents:
 - wait_for_ui_change (hierarchy diff based waiting)
 - Structured loading state detection
 - Snapshot revision / staleness metadata
-- Focused snapshot views / incremental snapshot diffs
+- Incremental / diff-based snapshot delivery (token-efficient)
+- Focused snapshot scoping (subtree / target-based)
 - Compose-aware wait robustness improvements
 - Explicit interaction sequencing guidance (tap → wait → verify pattern)
 - Exploration of optional action-level synchronization ergonomics (e.g. implicit stabilization or wait flags)
@@ -235,6 +238,7 @@ Very high.
 - Higher wait success rate for dynamic UI flows
 - Lower fallback usage to network/log checks
 - Reduced need for manual sequencing by agents in stateful flows
+- Reduced average snapshot size (tokens)
 
 ## Dependencies
 Depends on:
@@ -243,7 +247,7 @@ Depends on:
 
 Blocks or strengthens:
 - Better Compose / Custom Control Semantics
-- Action Trace Correlation
+- Advanced Trace Correlation and Analysis
 
 ---
 
@@ -311,6 +315,7 @@ Addresses cases where:
 - Executable-target preference rules
 - Actionability confidence metadata
 - Post-action state verification integration
+- Geometry-aware fallback targeting for weak semantic surfaces (e.g. sliders without accessible nodes)
 
 ## Expected Impact
 High.
@@ -325,6 +330,7 @@ High.
 - Reduced mis-targeted action failures
 - Lower retarget retries
 - Higher first-attempt action success
+- Reduced need for empirical coordinate probing on custom controls
 
 ## Dependencies
 Depends on:
@@ -407,6 +413,7 @@ Addresses friction around:
 - Drag vs tap adjustment strategy heuristics
 - Improved value snapping convergence
 - Control-specific adjustment fallback policies
+- Controlled search strategies for value convergence (e.g. binary / progressive adjustment)
 
 ## Expected Impact
 High.
@@ -469,7 +476,7 @@ Depends on:
 - Wait and Synchronization Reliability
 
 Strengthens:
-- Action Trace Correlation
+- Advanced Trace Correlation and Analysis
 
 ---
 
@@ -679,7 +686,7 @@ Interaction Expansion
 - Pinch to Zoom
 
 Deep Observability
-- Action Trace Correlation
+- Advanced Trace Correlation and Analysis
 
 ## Wave 1 (Current Focus)
 - Stronger State Verification
