@@ -332,6 +332,10 @@ export class ToolsInteract {
     return null
   }
 
+  private static _uiChangeSignaturesEqual(left: UiChangeSignatureSet, right: UiChangeSignatureSet): boolean {
+    return left.hierarchy === right.hierarchy && left.text === right.text && left.state === right.state
+  }
+
   private static _resolvedTargetFromElement(
     elementId: string,
     element: UiElement,
@@ -2016,7 +2020,7 @@ export class ToolsInteract {
     platform,
     deviceId,
     timeout_ms = 60000,
-    stability_window_ms = 250,
+    stability_window_ms = 300,
     expected_change
   }: {
     platform?: 'android' | 'ios',
@@ -2027,10 +2031,13 @@ export class ToolsInteract {
   }): Promise<WaitForUIChangeResponse> {
     const start = Date.now()
     const pollIntervalMs = 300
-    const stabilityWindow = Math.max(0, typeof stability_window_ms === 'number' ? stability_window_ms : 250)
+    const stabilityWindow = Math.max(0, typeof stability_window_ms === 'number' ? stability_window_ms : 300)
     let baseline: UiChangeSignatureSet | null = null
     let lastObservedRevision: number | null = null
     let lastLoadingState: any = null
+    let candidateSignatures: UiChangeSignatureSet | null = null
+    let candidateObservedChange: 'hierarchy_diff' | 'text_change' | 'state_change' | null = null
+    let candidateSinceMs: number | null = null
 
     while (Date.now() - start < timeout_ms) {
       try {
@@ -2044,31 +2051,29 @@ export class ToolsInteract {
         } else {
           const observedChange = ToolsInteract._matchesUiChange(expected_change, baseline, signatures)
           if (observedChange) {
-            if (stabilityWindow > 0) {
-              await new Promise(resolve => setTimeout(resolve, stabilityWindow))
-              const confirmTree = await ToolsObserve.getUITreeHandler({ platform, deviceId }) as any
-              const confirmSignatures = ToolsInteract._buildUiChangeSignatures(confirmTree)
-              const confirmChange = ToolsInteract._matchesUiChange(expected_change, baseline, confirmSignatures)
-              if (!confirmChange || confirmSignatures.hierarchy !== signatures.hierarchy || confirmSignatures.text !== signatures.text || confirmSignatures.state !== signatures.state) {
-                lastObservedRevision = typeof confirmTree?.snapshot_revision === 'number' ? confirmTree.snapshot_revision : lastObservedRevision
-                lastLoadingState = confirmTree?.loading_state ?? lastLoadingState
-                await new Promise(resolve => setTimeout(resolve, pollIntervalMs))
-                continue
-              }
-              lastObservedRevision = typeof confirmTree?.snapshot_revision === 'number' ? confirmTree.snapshot_revision : lastObservedRevision
-              lastLoadingState = confirmTree?.loading_state ?? lastLoadingState
+            if (!candidateSignatures || !ToolsInteract._uiChangeSignaturesEqual(candidateSignatures, signatures) || candidateObservedChange !== observedChange) {
+              candidateSignatures = signatures
+              candidateObservedChange = observedChange
+              candidateSinceMs = Date.now()
             }
 
-            return {
-              success: true,
-              observed_change: observedChange,
-              snapshot_revision: lastObservedRevision ?? undefined,
-              timeout: false,
-              elapsed_ms: Date.now() - start,
-              expected_change,
-              loading_state: lastLoadingState ?? null,
-              reason: 'UI change observed'
+            const stableForMs = candidateSinceMs === null ? 0 : Date.now() - candidateSinceMs
+            if (stabilityWindow === 0 || stableForMs >= stabilityWindow) {
+              return {
+                success: true,
+                observed_change: candidateObservedChange ?? observedChange,
+                snapshot_revision: lastObservedRevision ?? undefined,
+                timeout: false,
+                elapsed_ms: Date.now() - start,
+                expected_change,
+                loading_state: lastLoadingState ?? null,
+                reason: 'UI change observed'
+              }
             }
+          } else {
+            candidateSignatures = null
+            candidateObservedChange = null
+            candidateSinceMs = null
           }
         }
       } catch {
