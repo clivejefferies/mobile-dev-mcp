@@ -1,123 +1,25 @@
 # Mobile Debug MCP Roadmap
 
-## Planning Principles
+## Done
 
-Ordered by:
-
-
-1. Impact on agent reliability  
-2. Reduction in retries / brittleness  
-3. Breadth of app coverage improved  
-4. Implementation complexity vs payoff
-
-## Capability Status Definitions
-
-- **Completed**  
-  Capability implemented and considered part of the baseline platform.
-
-- **Spec Ready**  
-  Capability design or RFC is mature and implementation-ready, but not yet delivered.
-
-- **Planned**  
-  Capability is prioritized on the roadmap, but detailed specification and/or implementation work remains ahead.
-
-## Program-Level Success Metrics
-Track roadmap impact across releases using:
-
-- Retry reduction rate (% fewer action retries per task)
-- Element match success rate (% successful element targeting)
-- Verification success rate (% expect_* checks passing first attempt)
-- Wait success rate for asynchronous UI flows
-- Custom control interaction success rate
-- Gesture success rate
-- Mean time to root cause during debugging
-- Overall agent task completion rate
-- Reduced sequencing errors in multi-step interaction flows
-
-Primary KPI:
-Higher task success with fewer retries.
-
----
-
-# Roadmap Status Overview
-
-## Completed Capabilities
-
-- Stronger State Verification — Complete (Foundational verification layer shipped)
-- Richer Element Identity — Complete (Identity and selector confidence foundations shipped)
-- Better Compose / Custom Control Semantics — Complete (Semantic role enrichment and custom-adjustable inference shipped)
-- Verification Stabilization and Temporal Convergence — Complete (Temporal verification and convergence logic shipped)
-- Action Trace and Execution Observability — Complete (Structured execution trace model shipped)
-- Wait and Synchronization Reliability — Complete (RFC 013 folded into the main spec and shipped behavior verified on emulator)
-
-## Current Focus
-
-- Actionability Resolution
-- Adjustable Control Precision Hardening
-
-## Upcoming Work
-
-- Adjustable Control Precision Hardening
-- Environment Auto-Configuration and Toolchain Discovery
-- Adjustable Control Support
-- Signal-Oriented Diagnostic Filtering
-- Long Press Gesture
-
-## Rationale
-Reduce onboarding friction and improve developer experience by minimizing manual setup dependencies.
-
-**Status:** Planned
-
-Addresses friction around:
-- manual idb installation
-- manual adb path configuration
-- manual xcrun path configuration
-- environment drift across machines
-- setup failures blocking first use
-
-- Automatic discovery of adb
-- Automatic discovery of xcrun
-- idb detection and guided bootstrap support
-- Startup toolchain validation
-- Environment health diagnostics / doctor-style checks
-- Minimal-manual-configuration defaults
-- Runtime device/emulator health signals (crash detection, process lifecycle awareness)
-- App stability monitoring during active sessions
-
-## Expected Impact
-High.
-
-## Exit Criteria
-- adb and xcrun auto-discovery implemented
-- Missing dependencies surfaced with guided remediation
-- Startup environment validation available
-- Manual path configuration eliminated or minimized for standard setups
-- First-run setup validated on representative developer environments
-
-## Success Metrics
-- Reduced setup friction during onboarding
-- Lower environment configuration failures
-- Faster time-to-first-successful-session
-- Reduced support/debugging caused by local setup issues
-- Reduced unknown-failure sessions caused by app or emulator instability
-
-## Dependencies
-Depends on:
 - Stronger State Verification
 - Richer Element Identity
-
-Strengthens:
+- Better Compose / Custom Control Semantics
+- Verification Stabilization and Temporal Convergence
+- Action Trace and Execution Observability
+- Wait and Synchronization Reliability
 - Actionability Resolution
-- Broader user adoption readiness
 
----
+## Todo
 
-## Later Horizon
-
+- Adjustable Control Support
+- Adjustable Control Precision Hardening
+- Environment Auto-Configuration and Toolchain Discovery
+- Signal-Oriented Diagnostic Filtering
+- Long Press Gesture
+- Runtime Debugger Introspection
 - Pinch to Zoom
 - Advanced Trace Correlation and Analysis
-
----
 
 # Stronger State Verification
 
@@ -577,6 +479,81 @@ Depends on:
 
 ---
 
+# Runtime Debugger Introspection
+
+## Rationale
+Enables agents to move from symptom observation to runtime causal analysis by inspecting paused application state during debugging sessions.
+
+**Status:** Planned
+
+Addresses limitations where agents:
+- observe UI failures but cannot determine runtime cause
+- cannot inspect ViewModel or controller state
+- lack access to local variables and stack context
+- cannot reason about async execution state
+
+## Scope
+Debugger-assisted runtime inspection primitives:
+
+```json
+debugger.pause_state()
+debugger.stack_trace()
+debugger.locals()
+debugger.inspect_object(object_id)
+debugger.evaluate(expression)
+debugger.threads()
+```
+
+Includes:
+- stack frame inspection
+- local variable inspection
+- object graph traversal
+- thread inspection
+- expression evaluation
+- platform abstraction over JDWP / LLDB
+- bounded object expansion and summarization
+- coroutine/task inspection support
+
+Future exploration:
+- controlled stepping support
+- debugger-assisted recovery workflows
+
+## Expected Impact
+Very high.
+
+Transforms debugging from:
+- surface-level symptom detection
+
+toward:
+- root-cause-oriented runtime reasoning
+
+## Exit Criteria
+- Paused runtime state accessible through MCP
+- Local variable inspection implemented
+- Stack trace inspection implemented
+- Object inspection primitives implemented
+- Runtime inspection validated on representative Android flows
+- Object expansion safeguards implemented
+- Expression evaluation available with safety limits
+
+## Success Metrics
+- Lower mean time-to-root-cause
+- Higher causal diagnosis accuracy
+- Reduced debugging iteration loops
+- Faster identification of state-management failures
+- Improved async/concurrency failure diagnosis
+
+## Dependencies
+Depends on:
+- Action Trace and Execution Observability
+- Stronger State Verification
+- Wait and Synchronization Reliability
+- Signal-Oriented Diagnostic Filtering
+
+Strengthens:
+- Advanced Trace Correlation and Analysis
+- Future autonomous recovery systems
+
 # Pinch to Zoom
 
 ## Rationale
@@ -659,103 +636,3 @@ Depends on:
 - Richer Element Identity
 - Wait and Synchronization Reliability
 
----
-
-# Roadmap Sequence
-
-## Dependency Summary
-
-Foundation
-- Stronger State Verification
-- Richer Element Identity
-
-Synchronization & Actionability
-- Environment Auto-Configuration and Toolchain Discovery
-- Wait and Synchronization Reliability
-- Actionability Resolution
-
-Control Precision & Observability
-- Adjustable Control Support
-- Adjustable Control Precision Hardening
-- Better Compose / Custom Control Semantics
-- Signal-Oriented Diagnostic Filtering
-- Verification Stabilization and Temporal Convergence
-
-Interaction Expansion
-- Long Press Gesture
-- Pinch to Zoom
-
-Deep Observability
-- Advanced Trace Correlation and Analysis
-
-## Wave 1 (Current Focus)
-- Stronger State Verification
-- Richer Element Identity
-- Wait and Synchronization Reliability
-- Actionability Resolution
-- Environment Auto-Configuration and Toolchain Discovery
-
-Focus:
-Make core loop reliable and reduce onboarding friction.
-
----
-
-## Wave 2 (Control Precision + Diagnostics)
-- Adjustable Control Support
-- Adjustable Control Precision Hardening
-- Better Compose / Custom Control Semantics
-- Signal-Oriented Diagnostic Filtering
-
-Focus:
-Improve control precision, verification convergence, custom control reliability, and signal observability.
-
----
-
-## Wave 3 (Interaction Expansion)
-- Long Press Gesture
-
-Focus:
-Expand interaction capability after core control reliability is improved.
-
----
-
-## Wave 4 (Advanced Gestures + Deep Observability)
-- Pinch to Zoom
-- Advanced Trace Correlation and Analysis
-
-Focus:
-Advanced gestures + deep observability.
-
----
-
-# Roadmap Ordering
-
-Roadmap Ordering:
-1. Stronger State Verification
-2. Richer Element Identity
-3. Wait and Synchronization Reliability
-4. Actionability Resolution
-5. Adjustable Control Support
-6. Adjustable Control Precision Hardening
-7. Environment Auto-Configuration and Toolchain Discovery
-8. Better Compose / Custom Control Semantics
-9. Signal-Oriented Diagnostic Filtering
-10. Long Press Gesture
-11. Pinch to Zoom
-12. Advanced Trace Correlation and Analysis
-
-Rationale:
-- Early roadmap items harden state, targeting, synchronization, environment readiness, and action execution.
-- Mid roadmap items improve control precision and signal observability.
-- Later interaction-focused items expand interaction coverage.
-- Final observability work deepens debugging observability.
-
----
-
-## Future Considerations
-Still out of scope:
-
-- Full autonomous recovery planning (deferred until after verification stabilization)
-- Autonomous retry strategy
-- MCP-level agent orchestration
-- Autonomous recovery hinting (future consideration only)
