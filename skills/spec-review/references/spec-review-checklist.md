@@ -1,6 +1,6 @@
 # Spec Review Checklist
 
-Ask these questions while reviewing a specification for implementation and execution readiness:
+Ask these questions while reviewing a spec for implementation and execution readiness:
 
 1. Is the problem statement specific and grounded in current failures?
 2. Are non-goals explicit?

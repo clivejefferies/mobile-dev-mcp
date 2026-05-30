@@ -1,6 +1,6 @@
 # Spec Review Template
 
-Use this structure for every specification review:
+Use this structure for every spec review:
 
 ## Verdict
 - Ready / Needs clarification / Needs implementation contract / Needs execution contract / Not ready
@@ -9,7 +9,7 @@ Use this structure for every specification review:
 - One short paragraph on the spec's current quality.
 
 ## What is good
-- List the strongest parts of the RFC.
+- List the strongest parts of the spec.
 
 ## Issues
 For each issue, include:

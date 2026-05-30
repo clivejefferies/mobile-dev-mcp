@@ -495,7 +495,7 @@ Addresses limitations where agents:
 ## Scope
 Debugger-assisted runtime inspection primitives:
 
-```json
+```javascript
 debugger.pause_state()
 debugger.stack_trace()
 debugger.locals()
@@ -635,4 +635,3 @@ Depends on:
 - Stronger State Verification
 - Richer Element Identity
 - Wait and Synchronization Reliability
-
