@@ -2,6 +2,9 @@
 
 All notable changes to the **Mobile Debug MCP** project will be documented in this file.
 
+## [0.31.0]
+- Added tool discovery/automation
+
 ## [0.30.2]
 - improved slider interaction
 

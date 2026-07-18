@@ -9,12 +9,12 @@
 - Action Trace and Execution Observability
 - Wait and Synchronization Reliability
 - Actionability Resolution
+- Environment Auto-Configuration and Toolchain Discovery
+- Adjustable Control Support
 
 ## Todo
 
-- Adjustable Control Support
 - Adjustable Control Precision Hardening
-- Environment Auto-Configuration and Toolchain Discovery
 - Signal-Oriented Diagnostic Filtering
 - Long Press Gesture
 - Runtime Debugger Introspection
@@ -205,7 +205,7 @@ Strengthens:
 ## Rationale
 Reduces failures caused by interacting with discoverable but non-actionable UI nodes.
 
-**Status:** Planned
+**Status:** Completed
 
 Addresses cases where:
 - visible text is not the true click target
@@ -251,7 +251,7 @@ Blocks or strengthens:
 ## Rationale
 High leverage improvement for sliders and parameterized controls.
 
-**Status:** Planned
+**Status:** Completed
 
 Addresses friction around:
 - coordinate-calibrated slider interaction

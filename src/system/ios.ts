@@ -12,14 +12,21 @@ export async function checkIOS() {
       iosAvailable = true
       try {
         const simOut = execSync(`${xcrun} simctl list devices booted --json`, { encoding: 'utf8', timeout: 1500, stdio: ['ignore','pipe','ignore'] })
-        const data = JSON.parse(simOut)
-        type SimDevice = { state?: string }
-        let count = 0
-        for (const k in data.devices) {
-          const arr = data.devices[k]
-          if (Array.isArray(arr)) count += arr.filter((d: SimDevice) => (d.state || '').toLowerCase() === 'booted').length
+        try {
+          const data = JSON.parse(simOut)
+          type SimDevice = { state?: string }
+          let count = 0
+          for (const k in data.devices) {
+            const arr = data.devices[k]
+            if (Array.isArray(arr)) count += arr.filter((d: SimDevice) => (d.state || '').toLowerCase() === 'booted').length
+          }
+          iosDevices = count
+        } catch {
+          // Some xcrun builds include extra text around the JSON response.
+          // Fall back to counting explicit booted state markers so readiness remains deterministic.
+          const bootedMatches = (simOut.match(/"state"\s*:\s*"Booted"/gi) || []).length
+          iosDevices = bootedMatches
         }
-        iosDevices = count
         if (iosDevices === 0) issues.push('No iOS simulators/devices booted')
       } catch (e: unknown) { console.debug('[get_system_status] simctl list failed: ' + String(e)) }
     } catch (e: unknown) { iosAvailable = false; console.debug('[get_system_status] xcrun --version failed: ' + String(e)) }

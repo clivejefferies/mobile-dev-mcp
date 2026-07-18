@@ -74,6 +74,7 @@ async function run() {
     XCRUN_VERSION_OUTPUT: process.env.XCRUN_VERSION_OUTPUT,
     XCRUN_VERSION_STATUS: process.env.XCRUN_VERSION_STATUS,
     SIMCTL_LIST_OUTPUT: process.env.SIMCTL_LIST_OUTPUT,
+    MOBILE_DEBUG_MCP_HOST_OS: process.env.MOBILE_DEBUG_MCP_HOST_OS,
   }
 
   try {
@@ -94,8 +95,11 @@ async function run() {
     const healthy = await systemStatus.getSystemStatus()
     assert.strictEqual(healthy.success, true)
     assert.strictEqual((healthy as any).status, 'ready')
+    assert.strictEqual((healthy as any).host.supported, true)
     assert.strictEqual(healthy.adbAvailable, true)
     assert.strictEqual(typeof healthy.adbVersion, 'string')
+    assert.strictEqual((healthy as any).android.status, 'ready')
+    assert.strictEqual((healthy as any).ios.status, 'ready')
     assert.strictEqual((healthy as any).summary.android.ready, true)
     assert.strictEqual(typeof (healthy as any).summary.ios.summary, 'string')
 
@@ -136,6 +140,19 @@ async function run() {
     assert.strictEqual(missingXcrun.adbAvailable, true)
     assert.strictEqual(Array.isArray(missingXcrun.issues), true)
     assert.strictEqual((missingXcrun as any).summary.ios.ready, false)
+    assert.strictEqual((missingXcrun as any).ios.status, 'unavailable')
+
+    setScenario({ MOBILE_DEBUG_MCP_HOST_OS: 'freebsd' })
+    const unsupported = await systemStatus.getSystemStatus()
+    assert.strictEqual((unsupported as any).host.os, 'freebsd')
+    assert.strictEqual((unsupported as any).host.supported, false)
+    assert.strictEqual((unsupported as any).android.status, 'unsupported')
+    assert.strictEqual((unsupported as any).ios.status, 'unsupported')
+    assert.strictEqual((unsupported as any).android.failures[0].code, 'HOST_OS_UNSUPPORTED')
+    assert.strictEqual((unsupported as any).ios.failures[0].code, 'HOST_OS_UNSUPPORTED')
+    assert.strictEqual(unsupported.adbAvailable, false)
+    assert.strictEqual(unsupported.iosAvailable, false)
+    assert.strictEqual((unsupported as any).summary.overall, 'blocked')
 
     console.log('system_status checks passed')
   } finally {

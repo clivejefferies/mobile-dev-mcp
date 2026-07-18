@@ -51,6 +51,8 @@ Notes:
 - Requires `platform`, `projectType`, and `projectPath`.
 - Android builds prefer the project `gradlew` when present.
 - iOS builds honor environment-based Xcode destination and derived-data settings where configured.
+- Android setup typically needs `ADB_PATH` or `ANDROID_SDK_ROOT`/`ANDROID_HOME`, plus `GRADLE_JAVA_HOME` or `JAVA_HOME` for Gradle-backed builds.
+- iOS setup typically needs `XCRUN_PATH` and `MCP_IDB_PATH` or `IDB_PATH` when `idb` is not on `PATH`.
 
 ---
 
@@ -102,8 +104,8 @@ Response:
 ```
 
 Notes:
-- Android: prefers `ADB_PATH` if set, otherwise falls back to `adb` on PATH.
-- iOS: uses `xcrun simctl install` for simulators and `idb` where available for devices.
+- Android: prefers `ADB_PATH` if set, otherwise falls back to `adb` on `PATH`, and will also use `ANDROID_SDK_ROOT`/`ANDROID_HOME` when present.
+- iOS: uses `xcrun simctl install` for simulators and `idb` where available for devices; point `MCP_IDB_PATH` or `IDB_PATH` at a non-standard `idb` binary.
 
 ---
 

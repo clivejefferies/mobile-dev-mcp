@@ -59,17 +59,13 @@ export function getIdbCmd() {
 
 export async function isIDBInstalled(): Promise<boolean> {
   const cmd = getIdbCmd()
+  if (!cmd) return false
   try {
-    execSync(`command -v ${cmd}`, { stdio: ['ignore','pipe','ignore'] })
+    execSync(`${cmd} list-targets --json`, { stdio: ['ignore','pipe','pipe'], timeout: 5000 })
     return true
   } catch (e: unknown) {
-    try {
-      execSync(`${cmd} list-targets --json`, { stdio: ['ignore','pipe','ignore'], timeout: 2000 })
-      return true
-    } catch (e2: unknown) {
-      console.debug(`[isIDBInstalled] idb presence check failed for '${cmd}': ${e instanceof Error ? e.message : String(e2)}`)
-      return false
-    }
+    console.debug(`[isIDBInstalled] idb probe failed for '${cmd}': ${e instanceof Error ? e.message : String(e)}`)
+    return false
   }
 }
 

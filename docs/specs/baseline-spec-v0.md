@@ -81,7 +81,7 @@ That flow is applied to `start_app`, `restart_app`, `tap`, `swipe`, `scroll_to_e
 | --- | --- | --- | --- | --- |
 | `classify_action_outcome` | Deterministic rule-based classifier over supplied signals. | `{ uiChanged: boolean, expectedElementVisible?: boolean, networkRequests?: { url?: string, status: 'success'\|'failure'\|'retryable' }[], hasLogErrors?: boolean }` | `{ outcome: 'success'\|'no_op'\|'backend_failure'\|'ui_failure'\|'unknown', reasoning: string, nextAction?: 'call_get_network_activity' }` | Pure computation. |
 | `get_network_activity` | Return normalized request events since last action window. | `{}` | `{ requests: NetworkRequestSummary[], count: number }` | Reads logs, advances internal `lastConsumedTimestamp`. |
-| `get_system_status` | Aggregate Android/iOS/Gradle readiness. | `{}` | `{ success, status: 'ready'\|'degraded'\|'blocked', adbAvailable, adbVersion, devices, deviceStates, logsAvailable, envValid, issues, appInstalled, iosAvailable, iosDevices, gradleJavaHome, gradleValid, gradleFilesChecked, gradleSuggestedFixes, summary }` | Reads toolchain/device state. |
+| `get_system_status` | Aggregate Android/iOS/Gradle readiness. | `{}` | Additive response: legacy flat fields remain available, with nested `host`, `android`, and `ios` objects added alongside them. | Reads toolchain/device state. |
 
 ## 3. Action Tools (Mutation Tools)
 
