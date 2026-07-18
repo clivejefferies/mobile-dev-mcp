@@ -53,6 +53,10 @@ interface UiElement {
   test_tag?: string | null
   selector?: { value: string | null, confidence: { score: number, reason: string } | null } | null
   semantic?: UIElementSemanticMetadata | null
+  actions?: string[] | null
+  accessibilityActions?: string[] | null
+  runtimeActions?: string[] | null
+  platformActions?: string[] | null
 }
 
 interface ResolvedUiElementContext {
@@ -99,6 +103,15 @@ interface RankedResolutionCandidate {
   score: number
   reason: string
   interactable: boolean
+}
+
+interface InferredLabeledSliderState {
+  current: number
+  min: number
+  max: number
+  value_range: { min: number; max: number }
+  touch_bounds: [number, number, number, number]
+  source: 'nearby_labels'
 }
 
 function buildObservationTrace({
@@ -719,11 +732,215 @@ export class ToolsInteract {
     if (!el?.state) return null
     const stateValue = el.state[property as keyof UIElementState]
     if (typeof stateValue === 'number' && Number.isFinite(stateValue)) return stateValue
+    const parsedStateValue = ToolsInteract._parseNumericControlValue(stateValue)
+    if (parsedStateValue !== null) return parsedStateValue
     if (property === 'value' || property === 'raw_value') {
       const fallback = el.state.raw_value ?? el.state.value
       if (typeof fallback === 'number' && Number.isFinite(fallback)) return fallback
+      return ToolsInteract._parseNumericControlValue(fallback)
     }
     return null
+  }
+
+  private static _parseNumericControlValue(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    if (!trimmed) return null
+
+    const percent = trimmed.match(/^([-+]?\d+(?:\.\d+)?)\s*%$/)
+    if (percent) return Number(percent[1])
+
+    const fraction = trimmed.match(/^([-+]?\d+(?:\.\d+)?)\s+of\s+[-+]?\d+(?:\.\d+)?$/i)
+    if (fraction) return Number(fraction[1])
+
+    const plain = Number(trimmed)
+    if (Number.isFinite(plain)) return plain
+
+    const trailing = trimmed.match(/,\s*([-+]?\d+(?:\.\d+)?)$/)
+    if (trailing) return Number(trailing[1])
+
+    return null
+  }
+
+  private static _readNumericControlRange(el: UiElement | null): { min: number; max: number } | null {
+    const min = typeof el?.state?.value_range?.min === 'number' ? el.state.value_range.min : null
+    const max = typeof el?.state?.value_range?.max === 'number' ? el.state.value_range.max : null
+    if (min !== null && max !== null && Number.isFinite(min) && Number.isFinite(max) && max > min) {
+      return { min, max }
+    }
+
+    const value = el?.state?.value ?? el?.state?.raw_value
+    if (typeof value === 'string') {
+      const fraction = value.trim().match(/^[-+]?\d+(?:\.\d+)?\s+of\s+([-+]?\d+(?:\.\d+)?)$/i)
+      if (fraction) {
+        const parsedMax = Number(fraction[1])
+        if (Number.isFinite(parsedMax) && parsedMax > 0) return { min: 0, max: parsedMax }
+      }
+    }
+
+    return null
+  }
+
+  private static _readControlStep(el: UiElement | null): number | null {
+    const candidates = [
+      el?.state?.step,
+      el?.state?.value_range?.step
+    ]
+    for (const candidate of candidates) {
+      if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0) return candidate
+    }
+    return null
+  }
+
+  private static _quantizeTargetValue(targetValue: number, min: number, max: number, step: number | null): number {
+    if (!step) return targetValue
+    const quantized = min + (Math.round((targetValue - min) / step) * step)
+    const bounded = Math.max(min, Math.min(max, quantized))
+    const precision = ToolsInteract._decimalPrecisionForStep(step)
+    return Number(bounded.toFixed(precision))
+  }
+
+  private static _decimalPrecisionForStep(step: number): number {
+    const normalized = String(step).toLowerCase()
+    const [coefficient, exponentPart] = normalized.split('e')
+    const coefficientDecimals = coefficient.includes('.')
+      ? coefficient.split('.')[1]?.length ?? 0
+      : 0
+    const exponent = exponentPart !== undefined ? Number(exponentPart) : 0
+    const precision = exponent < 0
+      ? coefficientDecimals + Math.abs(exponent)
+      : Math.max(0, coefficientDecimals - exponent)
+    return Math.max(0, Math.min(12, precision))
+  }
+
+  private static _defaultAdjustTolerance(range: { min: number; max: number } | null, step: number | null): number {
+    if (step) return 0
+    if (!range) return 0
+    return Math.max(0, 0.01 * Math.abs(range.max - range.min))
+  }
+
+  private static _runtimeActionSet(el: UiElement | null): Set<string> {
+    const values = [
+      ...(Array.isArray(el?.actions) ? el!.actions! : []),
+      ...(Array.isArray(el?.accessibilityActions) ? el!.accessibilityActions! : []),
+      ...(Array.isArray(el?.runtimeActions) ? el!.runtimeActions! : []),
+      ...(Array.isArray(el?.platformActions) ? el!.platformActions! : [])
+    ]
+    return new Set(values.map((value) => ToolsInteract._normalize(value)).filter(Boolean))
+  }
+
+  private static _hasDirectAdjustmentAction(el: UiElement | null): boolean {
+    const actions = ToolsInteract._runtimeActionSet(el)
+    return [
+      'action_set_progress',
+      'set_progress',
+      'setprogress',
+      'semanticsactions.setprogress',
+      'set_value',
+      'setvalue',
+      'direct_set_value'
+    ].some((action) => actions.has(action))
+  }
+
+  private static _adjustmentDirections(el: UiElement | null): { increment: boolean; decrement: boolean } {
+    const actions = ToolsInteract._runtimeActionSet(el)
+    return {
+      increment: ['increment', 'accessibility_increment', 'action_increment'].some((action) => actions.has(action)),
+      decrement: ['decrement', 'accessibility_decrement', 'action_decrement'].some((action) => actions.has(action))
+    }
+  }
+
+  private static _textFromElement(el: UiElement | null): string {
+    return String(el?.text ?? el?.contentDescription ?? el?.contentDesc ?? el?.accessibilityLabel ?? el?.value ?? '').trim()
+  }
+
+  private static _parseLeadingNumber(text: string): number | null {
+    const match = text.trim().match(/^([-+]?\d+(?:\.\d+)?)(?:\s*[a-zA-Z%]+)?$/)
+    if (!match) return null
+    const value = Number(match[1])
+    return Number.isFinite(value) ? value : null
+  }
+
+  private static _inferLabeledSliderState(elements: UiElement[], track: UiElement | null): InferredLabeledSliderState | null {
+    const trackBounds = ToolsInteract._normalizeBounds(track?.bounds)
+    if (!track || !trackBounds) return null
+    const type = ToolsInteract._normalize(track.type ?? track.class ?? '')
+    const role = ToolsInteract._normalize(track.role ?? '')
+    const width = trackBounds[2] - trackBounds[0]
+    const height = trackBounds[3] - trackBounds[1]
+    const wideTrackLike = width >= 240 && height <= 220
+    const knownTrackLike = /slider|seekbar|range/.test(type) || /slider|range/.test(role)
+    if (!wideTrackLike && !knownTrackLike) return null
+
+    const trackTop = trackBounds[1]
+    const trackBottom = trackBounds[3]
+    const trackCenterX = (trackBounds[0] + trackBounds[2]) / 2
+    const labels = elements
+      .map((el, index) => {
+        const bounds = ToolsInteract._normalizeBounds(el.bounds)
+        const text = ToolsInteract._textFromElement(el)
+        const value = ToolsInteract._parseLeadingNumber(text)
+        return bounds && text && value !== null
+          ? {
+            index,
+            el,
+            text,
+            value,
+            bounds,
+            centerX: (bounds[0] + bounds[2]) / 2,
+            centerY: (bounds[1] + bounds[3]) / 2,
+            hasUnit: /[a-zA-Z%]/.test(text)
+          }
+          : null
+      })
+      .filter((label): label is NonNullable<typeof label> => !!label)
+
+    const rangeLabels = labels
+      .filter((label) => {
+        const verticallyNearTrack = label.centerY >= trackTop - 520 && label.centerY <= trackBottom + 260
+        const horizontallyNearTrack = label.centerX >= trackBounds[0] - 120 && label.centerX <= trackBounds[2] + 120
+        return verticallyNearTrack && horizontallyNearTrack && label.hasUnit
+      })
+      .sort((a, b) => a.centerX - b.centerX)
+
+    if (rangeLabels.length < 2) return null
+    const minLabel = rangeLabels[0]
+    const maxLabel = rangeLabels[rangeLabels.length - 1]
+    if (!minLabel || !maxLabel || maxLabel.value <= minLabel.value) return null
+
+    const currentCandidates = labels
+      .filter((label) => {
+        if (label.index === minLabel.index || label.index === maxLabel.index) return false
+        if (label.value < minLabel.value || label.value > maxLabel.value) return false
+        if (label.centerY < trackTop - 950 || label.centerY > minLabel.centerY - 20) return false
+        return label.centerX >= trackCenterX - 80
+      })
+      .sort((a, b) => {
+        const yDistance = Math.abs((trackTop - 420) - a.centerY) - Math.abs((trackTop - 420) - b.centerY)
+        if (yDistance !== 0) return yDistance
+        return b.centerX - a.centerX
+      })
+
+    const currentLabel = currentCandidates[0]
+    if (!currentLabel) return null
+
+    const candidateBelowRangeLabels = minLabel.centerY < trackTop && maxLabel.centerY < trackTop
+    const labelDerivedBounds: [number, number, number, number] = [
+      Math.min(minLabel.bounds[0], trackBounds[0]),
+      Math.max(currentLabel.bounds[3] + 12, Math.min(minLabel.bounds[1], maxLabel.bounds[1]) - 160),
+      Math.max(maxLabel.bounds[2], trackBounds[2]),
+      Math.max(currentLabel.bounds[3] + 80, Math.min(minLabel.bounds[1], maxLabel.bounds[1]) - 32)
+    ]
+
+    return {
+      current: currentLabel.value,
+      min: minLabel.value,
+      max: maxLabel.value,
+      value_range: { min: minLabel.value, max: maxLabel.value },
+      touch_bounds: candidateBelowRangeLabels ? labelDerivedBounds : trackBounds,
+      source: 'nearby_labels'
+    }
   }
 
   private static _buildControlPoint(bounds: [number, number, number, number], ratio: number, axis: 'horizontal' | 'vertical') {
@@ -1080,8 +1297,8 @@ export class ToolsInteract {
     element_id,
     property = 'value',
     targetValue,
-    tolerance = 0,
-    maxAttempts = 3,
+    tolerance,
+    maxAttempts,
     platform,
     deviceId
   }: {
@@ -1096,8 +1313,10 @@ export class ToolsInteract {
   }): Promise<AdjustControlResponse> {
     const actionType = 'adjust_control'
     const targetSelector = selector ?? (element_id ? { elementId: element_id } : null)
-    const normalizedTolerance = Number.isFinite(tolerance) ? Math.max(0, tolerance) : 0
-    const attemptsLimit = Math.max(1, Math.floor(Number(maxAttempts) || 1))
+    const requestedTolerance = typeof tolerance === 'number' && Number.isFinite(tolerance) ? Math.max(0, tolerance) : null
+    const attemptsLimit = maxAttempts === undefined || maxAttempts === null
+      ? 5
+      : Math.max(1, Math.floor(Number(maxAttempts) || 1))
     const sourcePlatform: 'android' | 'ios' = platform || 'android'
     let resolvedPlatform = sourcePlatform
     let resolvedDeviceId = deviceId
@@ -1148,6 +1367,7 @@ export class ToolsInteract {
           retry_depth: attempts
         })
       }
+      const responseTolerance = requestedTolerance ?? 0
       const base = buildActionExecutionResult({
         actionType,
         sourceModule: 'interact',
@@ -1160,7 +1380,7 @@ export class ToolsInteract {
         failure: { failureCode, retryable },
         details: {
           target_value: targetValue,
-          tolerance: normalizedTolerance,
+          tolerance: responseTolerance,
           property,
           attempts,
           adjustment_mode: adjustmentMode,
@@ -1177,7 +1397,7 @@ export class ToolsInteract {
         target_state: {
           property,
           target_value: targetValue,
-          tolerance: normalizedTolerance
+          tolerance: responseTolerance
         },
         actual_state: actualState,
         within_tolerance: false,
@@ -1295,8 +1515,8 @@ export class ToolsInteract {
       return null
     }
 
-    if (!selector && !element_id) {
-      return buildFailure('ELEMENT_NOT_FOUND', 'selector or element_id is required', null, undefined, null, 0, 'gesture', false)
+    if ((!selector && !element_id) || (selector && element_id)) {
+      return buildFailure('ELEMENT_NOT_FOUND', 'exactly one of selector or element_id is required', null, undefined, null, 0, 'gesture', false)
     }
 
     if (selector && !element_id) {
@@ -1358,8 +1578,10 @@ export class ToolsInteract {
     let currentDevice: any = undefined
     let attemptCount = 0
     let cachedResolvedMatch: { el: UiElement, idx: number } | null = null
+    let coordinateTapsAwaitingFreshGesture = false
 
-    for (let attempt = 0; attempt < attemptsLimit; attempt++) {
+    adjustmentAttempts:
+    for (let attempt = 0; attempt < attemptsLimit && attemptCount < attemptsLimit; attempt++) {
       const resolved: {
         tree: any
         device: any
@@ -1400,11 +1622,29 @@ export class ToolsInteract {
         )
       }
 
-      const bounds = ToolsInteract._normalizeBounds(currentEl.bounds)
-      const valueRange = currentEl.state?.value_range ?? null
-      const currentValue = ToolsInteract._readNumericControlValue(currentEl, property)
+      const elementsForInference = Array.isArray(resolved.tree?.elements)
+        ? resolved.tree.elements as UiElement[]
+        : cachedResolvedMatch
+          ? [cachedResolvedMatch.el]
+          : [currentEl]
+      const inferredSliderState = ToolsInteract._inferLabeledSliderState(elementsForInference, currentEl)
+      const nativeBounds = ToolsInteract._normalizeBounds(currentEl.bounds)
+      const bounds = inferredSliderState?.touch_bounds ?? nativeBounds
+      const valueRange = ToolsInteract._readNumericControlRange(currentEl) ?? inferredSliderState?.value_range ?? null
+      const step = ToolsInteract._readControlStep(currentEl)
+      const normalizedTargetValue = valueRange
+        ? ToolsInteract._quantizeTargetValue(targetValue, valueRange.min, valueRange.max, step)
+        : targetValue
+      const effectiveTolerance = requestedTolerance ?? ToolsInteract._defaultAdjustTolerance(valueRange, step)
+      const currentValue = ToolsInteract._readNumericControlValue(currentEl, property) ?? inferredSliderState?.current ?? null
       const actualState = currentValue !== null
-        ? { property, value: currentValue, raw_value: typeof currentEl.state?.raw_value === 'number' ? currentEl.state.raw_value : undefined }
+        ? {
+          property,
+          value: currentValue,
+          raw_value: typeof currentEl.state?.raw_value === 'number'
+            ? currentEl.state.raw_value
+            : inferredSliderState?.current
+        }
         : null
 
       lastObservedState = actualState
@@ -1421,10 +1661,23 @@ export class ToolsInteract {
         return buildFailure('ELEMENT_NOT_INTERACTABLE', 'adjust_control currently supports numeric value and raw_value properties only', resolvedTarget, currentDevice, actualState, attemptCount, lastAdjustmentMode, false)
       }
 
-      if (currentValue !== null && Math.abs(currentValue - targetValue) <= normalizedTolerance) {
+      const isAdjustableControl = ToolsInteract._isAdjustableControl(currentEl) || !!inferredSliderState
+      if (!isAdjustableControl) {
+        return buildFailure('ELEMENT_NOT_INTERACTABLE', 'target is not an adjustable control', resolvedTarget, currentDevice, actualState, attemptCount, lastAdjustmentMode, false)
+      }
+
+      if (currentValue === null) {
+        return buildFailure('UNKNOWN', 'current numeric value is unavailable', resolvedTarget, currentDevice, actualState, attemptCount, lastAdjustmentMode, false)
+      }
+
+      if (valueRange && (targetValue < valueRange.min || targetValue > valueRange.max)) {
+        return buildFailure('CONTROL_CONVERGENCE_FAILED', `targetValue ${targetValue} is outside the control range ${valueRange.min}..${valueRange.max}`, resolvedTarget, currentDevice, actualState, attemptCount, lastAdjustmentMode, false)
+      }
+
+      if (currentValue !== null && Math.abs(currentValue - normalizedTargetValue) <= effectiveTolerance) {
         recordTraceStep('verify', 'success', {
           property,
-          target_value: targetValue,
+          target_value: normalizedTargetValue,
           actual_state: actualState,
           reason: 'control already within tolerance'
         })
@@ -1439,8 +1692,8 @@ export class ToolsInteract {
           uiFingerprintBefore: fingerprintBefore,
           uiFingerprintAfter,
           details: {
-            target_value: targetValue,
-            tolerance: normalizedTolerance,
+            target_value: normalizedTargetValue,
+            tolerance: effectiveTolerance,
             property,
             attempts: attemptCount,
             adjustment_mode: 'semantic',
@@ -1456,8 +1709,8 @@ export class ToolsInteract {
           ...base,
           target_state: {
             property,
-            target_value: targetValue,
-            tolerance: normalizedTolerance
+            target_value: normalizedTargetValue,
+            tolerance: effectiveTolerance
           },
           actual_state: actualState,
           within_tolerance: true,
@@ -1467,50 +1720,48 @@ export class ToolsInteract {
         }
       }
 
-      if (!ToolsInteract._isAdjustableControl(currentEl)) {
-        return buildFailure('ELEMENT_NOT_INTERACTABLE', 'target is not an adjustable control', resolvedTarget, currentDevice, actualState, attemptCount, lastAdjustmentMode, false)
-      }
-
       if (!bounds) {
         return buildFailure('ELEMENT_NOT_INTERACTABLE', 'adjustable control has no bounds', resolvedTarget, currentDevice, actualState, attemptCount, lastAdjustmentMode, false)
       }
-
-      const min = typeof valueRange?.min === 'number' ? valueRange.min : null
-      const max = typeof valueRange?.max === 'number' ? valueRange.max : null
-      if (min === null || max === null || !Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
-        return buildFailure('ELEMENT_NOT_INTERACTABLE', 'value_range unavailable', resolvedTarget, currentDevice, actualState, attemptCount, lastAdjustmentMode, false)
-      }
-
-      if (targetValue < min || targetValue > max) {
-        return buildFailure('UNKNOWN', `targetValue ${targetValue} is outside the control range ${min}..${max}`, resolvedTarget, currentDevice, actualState, attemptCount, lastAdjustmentMode, false)
-      }
-
-      const axis = ToolsInteract._controlAxis(currentEl, bounds)
-      const targetPoint = ToolsInteract._buildConservativeControlPoint(bounds, targetValue, currentValue, min, max, axis)
-      const currentPoint = currentValue !== null
-        ? ToolsInteract._buildControlPoint(bounds, (currentValue - min) / (max - min), axis)
-        : ToolsInteract._buildControlPoint(bounds, 0.5, axis)
-      const probePoints = ToolsInteract._buildAdjustmentProbePoints(bounds, targetValue, currentValue, min, max, axis)
 
       const runVerification = async (): Promise<{
         verification: any
         observedState: { property: string; value: number | null; raw_value?: number | null } | null
         withinTolerance: boolean
       }> => {
+        if (inferredSliderState) {
+          const tree = await ToolsObserve.getUITreeHandler({ platform: resolvedPlatform, deviceId: resolvedDeviceId }) as any
+          const elements = Array.isArray(tree?.elements) ? tree.elements as UiElement[] : []
+          const refreshed = ToolsInteract._inferLabeledSliderState(elements, currentEl)
+          const observedValue = refreshed?.current ?? null
+          const observedState = observedValue !== null
+            ? { property, value: observedValue, raw_value: observedValue }
+            : actualState
+
+          return {
+            verification: {
+              success: observedValue !== null && Math.abs(observedValue - normalizedTargetValue) <= effectiveTolerance,
+              observed_state: observedState,
+              reason: observedValue !== null
+                ? 'visible labeled value read from nearby slider labels'
+                : 'visible labeled value unavailable'
+            },
+            observedState,
+            withinTolerance: observedValue !== null && Math.abs(observedValue - normalizedTargetValue) <= effectiveTolerance
+          }
+        }
+
         const verification = await ToolsInteract.expectStateHandler({
           element_id: resolvedTarget?.elementId ?? element_id,
           selector: selector ?? undefined,
           property,
-          expected: targetValue,
+          expected: normalizedTargetValue,
           platform: resolvedPlatform,
           deviceId: resolvedDeviceId
         }) as any
 
-        const observedValue = typeof verification?.observed_state?.value === 'number'
-          ? verification.observed_state.value
-          : typeof verification?.observed_state?.raw_value === 'number'
-            ? verification.observed_state.raw_value
-            : null
+        const observedValue = ToolsInteract._parseNumericControlValue(verification?.observed_state?.value) ??
+          ToolsInteract._parseNumericControlValue(verification?.observed_state?.raw_value)
         const observedState = observedValue !== null
           ? {
             property,
@@ -1522,7 +1773,7 @@ export class ToolsInteract {
         return {
           verification,
           observedState,
-          withinTolerance: observedValue !== null && Math.abs(observedValue - targetValue) <= normalizedTolerance
+          withinTolerance: observedValue !== null && Math.abs(observedValue - normalizedTargetValue) <= effectiveTolerance
         }
       }
 
@@ -1531,86 +1782,276 @@ export class ToolsInteract {
       let verification: any = null
       let verificationResult: any = { verification: null, observedState: actualState, withinTolerance: false }
 
-      for (let i = 0; i < probePoints.length; i++) {
-        const probePoint = probePoints[i]
-        lastAdjustmentMode = 'coordinate'
-        recordTraceStep('execute', 'retry', {
-          attempt: attemptCount + 1,
-          mode: 'coordinate',
-          point: probePoint
-        })
-        const actionResult = await ToolsInteract.tapHandler({
-          platform: resolvedPlatform,
-          x: probePoint.x,
-          y: probePoint.y,
-          deviceId: resolvedDeviceId
-        })
-        attemptCount++
-        actionDevice = actionResult.device ?? actionDevice
-
-        if (!actionResult.success) {
+      const directActionSupported = ToolsInteract._hasDirectAdjustmentAction(currentEl)
+      if (directActionSupported && attemptCount < attemptsLimit) {
+        const { interact, resolved: actionResolved } = await ToolsInteract.getInteractionService(resolvedPlatform, resolvedDeviceId)
+        if (typeof interact.setAdjustableValue === 'function') {
+          lastAdjustmentMode = 'semantic'
           recordTraceStep('execute', 'retry', {
-            attempt: attemptCount,
-            mode: 'coordinate',
-            point: probePoint,
-            success: false
+            attempt: attemptCount + 1,
+            mode: 'semantic',
+            strategy: 'direct_set_value',
+            target_value: normalizedTargetValue
           })
-          continue
-        }
+          const actionResult = await interact.setAdjustableValue({
+            deviceId: actionResolved.id,
+            target: resolvedTarget,
+            property,
+            value: normalizedTargetValue
+          })
+          attemptCount++
+          actionDevice = actionResult?.device ?? actionDevice
 
-        verificationResult = await runVerification()
-        observedState = verificationResult.observedState
-        lastObservedState = observedState
-        recordTraceStep('verify', verificationResult.withinTolerance ? 'success' : 'retry', {
-          attempt: attemptCount,
-          property,
-          target_value: targetValue,
-          actual_state: observedState,
-          reason: verificationResult.verification?.reason ?? 'control did not converge yet'
-        })
-
-        if (verificationResult.withinTolerance) {
-          const uiFingerprintAfter = await ToolsInteract._captureFingerprint(resolvedPlatform, resolvedDeviceId)
-          const base = buildActionExecutionResult({
-            actionType,
-            sourceModule: 'interact',
-            device: actionDevice ?? currentDevice,
-            selector: targetSelector,
-            resolved: resolvedTarget,
-            success: true,
-            uiFingerprintBefore: fingerprintBefore,
-            uiFingerprintAfter,
-            details: {
-              target_value: targetValue,
-              tolerance: normalizedTolerance,
+          if (actionResult?.success !== false) {
+            verificationResult = await runVerification()
+            observedState = verificationResult.observedState
+            lastObservedState = observedState
+            recordTraceStep('verify', verificationResult.withinTolerance ? 'success' : 'retry', {
+              attempt: attemptCount,
               property,
-              attempts: attemptCount,
-              adjustment_mode: lastAdjustmentMode,
+              target_value: normalizedTargetValue,
               actual_state: observedState,
-              converged: true,
-              within_tolerance: true,
-              reason: verificationResult.verification?.reason ?? 'control converged to target value'
-            },
-            traceSteps
-          }) as AdjustControlResponse
+              reason: verificationResult.verification?.reason ?? 'direct adjustment did not converge yet'
+            })
 
-          return {
-            ...base,
-            target_state: {
-              property,
-              target_value: targetValue,
-              tolerance: normalizedTolerance
-            },
-            actual_state: observedState,
-            within_tolerance: true,
-            converged: true,
-            attempts: attemptCount,
-            adjustment_mode: lastAdjustmentMode
+            if (verificationResult.withinTolerance) {
+              const uiFingerprintAfter = await ToolsInteract._captureFingerprint(resolvedPlatform, resolvedDeviceId)
+              const base = buildActionExecutionResult({
+                actionType,
+                sourceModule: 'interact',
+                device: actionDevice ?? currentDevice,
+                selector: targetSelector,
+                resolved: resolvedTarget,
+                success: true,
+                uiFingerprintBefore: fingerprintBefore,
+                uiFingerprintAfter,
+                details: {
+                  target_value: normalizedTargetValue,
+                  tolerance: effectiveTolerance,
+                  property,
+                  attempts: attemptCount,
+                  adjustment_mode: lastAdjustmentMode,
+                  actual_state: observedState,
+                  converged: true,
+                  within_tolerance: true,
+                  reason: verificationResult.verification?.reason ?? 'control converged to target value'
+                },
+                traceSteps
+              }) as AdjustControlResponse
+
+              return {
+                ...base,
+                target_state: {
+                  property,
+                  target_value: normalizedTargetValue,
+                  tolerance: effectiveTolerance
+                },
+                actual_state: observedState,
+                within_tolerance: true,
+                converged: true,
+                attempts: attemptCount,
+                adjustment_mode: lastAdjustmentMode
+              }
+            }
+
+            cachedResolvedMatch = null
+            if (attemptCount < attemptsLimit) {
+              continue
+            }
           }
         }
       }
 
-      if (currentValue !== null) {
+      const directions = ToolsInteract._adjustmentDirections(currentEl)
+      if ((directions.increment || directions.decrement) && attemptCount < attemptsLimit) {
+        const { interact, resolved: actionResolved } = await ToolsInteract.getInteractionService(resolvedPlatform, resolvedDeviceId)
+        const adjustByDirection = typeof interact.adjustAccessibleValue === 'function'
+          ? interact.adjustAccessibleValue.bind(interact)
+          : null
+        while (adjustByDirection && attemptCount < attemptsLimit) {
+          const direction = normalizedTargetValue > (observedState?.value ?? currentValue) ? 'increment' : 'decrement'
+          if ((direction === 'increment' && !directions.increment) || (direction === 'decrement' && !directions.decrement)) break
+          lastAdjustmentMode = 'semantic'
+          recordTraceStep('execute', 'retry', {
+            attempt: attemptCount + 1,
+            mode: 'semantic',
+            strategy: 'accessibility_increment_decrement',
+            direction
+          })
+          const actionResult = await adjustByDirection({
+            deviceId: actionResolved.id,
+            target: resolvedTarget,
+            property,
+            direction
+          })
+          attemptCount++
+          actionDevice = actionResult?.device ?? actionDevice
+          if (actionResult?.success === false) break
+
+          verificationResult = await runVerification()
+          observedState = verificationResult.observedState
+          lastObservedState = observedState
+          recordTraceStep('verify', verificationResult.withinTolerance ? 'success' : 'retry', {
+            attempt: attemptCount,
+            property,
+            target_value: normalizedTargetValue,
+            actual_state: observedState,
+            reason: verificationResult.verification?.reason ?? 'incremental adjustment did not converge yet'
+          })
+
+          if (verificationResult.withinTolerance) {
+            const uiFingerprintAfter = await ToolsInteract._captureFingerprint(resolvedPlatform, resolvedDeviceId)
+            const base = buildActionExecutionResult({
+              actionType,
+              sourceModule: 'interact',
+              device: actionDevice ?? currentDevice,
+              selector: targetSelector,
+              resolved: resolvedTarget,
+              success: true,
+              uiFingerprintBefore: fingerprintBefore,
+              uiFingerprintAfter,
+              details: {
+                target_value: normalizedTargetValue,
+                tolerance: effectiveTolerance,
+                property,
+                attempts: attemptCount,
+                adjustment_mode: lastAdjustmentMode,
+                actual_state: observedState,
+                converged: true,
+                within_tolerance: true,
+                reason: verificationResult.verification?.reason ?? 'control converged to target value'
+              },
+              traceSteps
+            }) as AdjustControlResponse
+
+            return {
+              ...base,
+              target_state: {
+                property,
+                target_value: normalizedTargetValue,
+                tolerance: effectiveTolerance
+              },
+              actual_state: observedState,
+              within_tolerance: true,
+              converged: true,
+              attempts: attemptCount,
+              adjustment_mode: lastAdjustmentMode
+            }
+          }
+
+          cachedResolvedMatch = null
+          if (attemptCount < attemptsLimit) {
+            continue adjustmentAttempts
+          }
+        }
+      }
+
+      if (!bounds) {
+        return buildFailure('ELEMENT_NOT_INTERACTABLE', 'adjustable control has no bounds', resolvedTarget, currentDevice, actualState, attemptCount, lastAdjustmentMode, false)
+      }
+
+      if (!valueRange) {
+        return buildFailure('UNKNOWN', 'value_range unavailable', resolvedTarget, currentDevice, actualState, attemptCount, lastAdjustmentMode, false)
+      }
+
+      const min = valueRange.min
+      const max = valueRange.max
+      const axis = ToolsInteract._controlAxis(currentEl, bounds)
+      const targetPoint = ToolsInteract._buildConservativeControlPoint(bounds, normalizedTargetValue, currentValue, min, max, axis)
+      const currentPoint = ToolsInteract._buildControlPoint(bounds, (currentValue - min) / (max - min), axis)
+      if (!coordinateTapsAwaitingFreshGesture) {
+        const probePoints = inferredSliderState
+          ? [targetPoint]
+          : ToolsInteract._buildAdjustmentProbePoints(bounds, normalizedTargetValue, currentValue, min, max, axis)
+
+        for (let i = 0; i < probePoints.length && attemptCount < attemptsLimit; i++) {
+          const probePoint = probePoints[i]
+          lastAdjustmentMode = 'coordinate'
+          recordTraceStep('execute', 'retry', {
+            attempt: attemptCount + 1,
+            mode: 'coordinate',
+            point: probePoint
+          })
+          const actionResult = await ToolsInteract.tapHandler({
+            platform: resolvedPlatform,
+            x: probePoint.x,
+            y: probePoint.y,
+            deviceId: resolvedDeviceId
+          })
+          attemptCount++
+          actionDevice = actionResult.device ?? actionDevice
+
+          if (!actionResult.success) {
+            recordTraceStep('execute', 'retry', {
+              attempt: attemptCount,
+              mode: 'coordinate',
+              point: probePoint,
+              success: false
+            })
+            continue
+          }
+
+          verificationResult = await runVerification()
+          observedState = verificationResult.observedState
+          lastObservedState = observedState
+          recordTraceStep('verify', verificationResult.withinTolerance ? 'success' : 'retry', {
+            attempt: attemptCount,
+            property,
+            target_value: normalizedTargetValue,
+            actual_state: observedState,
+            reason: verificationResult.verification?.reason ?? 'control did not converge yet'
+          })
+
+          if (verificationResult.withinTolerance) {
+            const uiFingerprintAfter = await ToolsInteract._captureFingerprint(resolvedPlatform, resolvedDeviceId)
+            const base = buildActionExecutionResult({
+              actionType,
+              sourceModule: 'interact',
+              device: actionDevice ?? currentDevice,
+              selector: targetSelector,
+              resolved: resolvedTarget,
+              success: true,
+              uiFingerprintBefore: fingerprintBefore,
+              uiFingerprintAfter,
+              details: {
+                target_value: normalizedTargetValue,
+                tolerance: effectiveTolerance,
+                property,
+                attempts: attemptCount,
+                adjustment_mode: lastAdjustmentMode,
+                actual_state: observedState,
+                converged: true,
+                within_tolerance: true,
+                reason: verificationResult.verification?.reason ?? 'control converged to target value'
+              },
+              traceSteps
+            }) as AdjustControlResponse
+
+            return {
+              ...base,
+              target_state: {
+                property,
+                target_value: normalizedTargetValue,
+                tolerance: effectiveTolerance
+              },
+              actual_state: observedState,
+              within_tolerance: true,
+              converged: true,
+              attempts: attemptCount,
+              adjustment_mode: lastAdjustmentMode
+            }
+          }
+
+          coordinateTapsAwaitingFreshGesture = true
+          cachedResolvedMatch = null
+          if (attemptCount < attemptsLimit) {
+            continue adjustmentAttempts
+          }
+        }
+      }
+
+      if (attemptCount < attemptsLimit) {
+        coordinateTapsAwaitingFreshGesture = false
         lastAdjustmentMode = 'gesture'
         recordTraceStep('execute', 'retry', {
           attempt: attemptCount + 1,
@@ -1624,7 +2065,7 @@ export class ToolsInteract {
           y1: currentPoint.y,
           x2: targetPoint.x,
           y2: targetPoint.y,
-          duration: 220,
+          duration: inferredSliderState ? 520 : 220,
           deviceId: resolvedDeviceId
         })
         attemptCount++
@@ -1646,7 +2087,7 @@ export class ToolsInteract {
         recordTraceStep('verify', verificationResult.withinTolerance ? 'success' : 'retry', {
           attempt: attemptCount,
           property,
-          target_value: targetValue,
+          target_value: normalizedTargetValue,
           actual_state: observedState,
           reason: verificationResult.verification?.reason ?? 'gesture adjustment did not converge yet'
         })
@@ -1663,8 +2104,8 @@ export class ToolsInteract {
             uiFingerprintBefore: fingerprintBefore,
             uiFingerprintAfter,
             details: {
-              target_value: targetValue,
-              tolerance: normalizedTolerance,
+              target_value: normalizedTargetValue,
+              tolerance: effectiveTolerance,
               property,
               attempts: attemptCount,
               adjustment_mode: lastAdjustmentMode,
@@ -1680,8 +2121,8 @@ export class ToolsInteract {
             ...base,
             target_state: {
               property,
-              target_value: targetValue,
-              tolerance: normalizedTolerance
+              target_value: normalizedTargetValue,
+              tolerance: effectiveTolerance
             },
             actual_state: observedState,
             within_tolerance: true,
@@ -1699,7 +2140,7 @@ export class ToolsInteract {
         recordTraceStep('verify', 'success', {
           attempt: attemptCount,
           property,
-          target_value: targetValue,
+          target_value: normalizedTargetValue,
           actual_state: observedState,
           reason: verification?.reason ?? 'control converged to target value'
         })
@@ -1714,8 +2155,8 @@ export class ToolsInteract {
           uiFingerprintBefore: fingerprintBefore,
           uiFingerprintAfter,
           details: {
-            target_value: targetValue,
-            tolerance: normalizedTolerance,
+            target_value: normalizedTargetValue,
+            tolerance: effectiveTolerance,
             property,
             attempts: attemptCount,
             adjustment_mode: lastAdjustmentMode,
@@ -1731,8 +2172,8 @@ export class ToolsInteract {
           ...base,
           target_state: {
             property,
-            target_value: targetValue,
-            tolerance: normalizedTolerance
+            target_value: normalizedTargetValue,
+            tolerance: effectiveTolerance
           },
           actual_state: observedState,
           within_tolerance: true,
@@ -1742,23 +2183,25 @@ export class ToolsInteract {
         }
       }
 
-      cachedResolvedMatch = {
-        el: {
-          ...currentEl,
-          state: {
-            ...(currentEl.state ?? null),
-            ...(observedState ? {
-              [observedState.property]: observedState.value,
-              raw_value: observedState.raw_value ?? observedState.value
-            } : {})
-          }
-        },
-        idx: resolved.match.idx
-      }
+      cachedResolvedMatch = inferredSliderState
+        ? null
+        : {
+          el: {
+            ...currentEl,
+            state: {
+              ...(currentEl.state ?? null),
+              ...(observedState ? {
+                [observedState.property]: observedState.value,
+                raw_value: observedState.raw_value ?? observedState.value
+              } : {})
+            }
+          },
+          idx: resolved.match.idx
+        }
     }
 
     const uiFingerprintAfter = await ToolsInteract._captureFingerprint(resolvedPlatform, resolvedDeviceId)
-    return buildFailure('TIMEOUT', 'control did not converge within the allotted attempts', resolvedTarget, currentDevice, lastObservedState, attemptCount, lastAdjustmentMode, true, uiFingerprintAfter)
+    return buildFailure('CONTROL_CONVERGENCE_FAILED', 'control did not converge within the allotted attempts', resolvedTarget, currentDevice, lastObservedState, attemptCount, lastAdjustmentMode, true, uiFingerprintAfter)
   }
 
   static async swipeHandler({ platform = 'android', x1, y1, x2, y2, duration, deviceId }: { platform?: 'android' | 'ios', x1: number, y1: number, x2: number, y2: number, duration: number, deviceId?: string }) {
