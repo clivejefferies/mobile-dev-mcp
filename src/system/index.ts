@@ -517,7 +517,6 @@ export async function getSystemStatus() {
     const success = issues.length === 0
     const androidReady = androidRaw.adbAvailable && androidRaw.devices > 0 && !androidRaw.issues.some((issue) => /unauthorized|offline/i.test(issue))
     const iosReady = hostOs === 'macos' ? (iosRaw.iosAvailable && iosRaw.iosDevices > 0) : false
-    const gradleReady = (gradle.issues || []).length === 0
     const overallStatus = success ? 'ready' : (androidReady || iosReady ? 'degraded' : 'blocked')
 
     const javaHome = gradle.gradleJavaHome || (await detectJavaHome().catch(() => undefined))
