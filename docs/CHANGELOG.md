@@ -2,6 +2,9 @@
 
 All notable changes to the **Mobile Debug MCP** project will be documented in this file.
 
+## [0.30.2]
+- improved slider interaction
+
 ## [0.30.1]
 - Synced the server-reported version in `src/server-core.ts` with `package.json` so contract checks pass.
 - Completed the RFC 013 wait/synchronization implementation, including scoped waits and freshness metadata.
