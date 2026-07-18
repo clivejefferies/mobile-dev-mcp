@@ -282,12 +282,12 @@ async function handleAdjustControl(args: ToolCallArgs) {
   const element_id = getStringArg(args, 'element_id')
   const property = getStringArg(args, 'property') ?? 'value'
   const targetValue = requireNumberArg(args, 'targetValue')
-  const tolerance = getNumberArg(args, 'tolerance') ?? 0
-  const maxAttempts = getNumberArg(args, 'maxAttempts') ?? 3
+  const tolerance = getNumberArg(args, 'tolerance')
+  const maxAttempts = getNumberArg(args, 'maxAttempts')
   const platform = getStringArg(args, 'platform') as PlatformArg | undefined
   const deviceId = getStringArg(args, 'deviceId')
-  if (!selector && !element_id) {
-    throw new Error('Missing selector or element_id argument')
+  if ((!selector && !element_id) || (selector && element_id)) {
+    throw new Error('Exactly one of selector or element_id argument is required')
   }
   const res = await ToolsInteract.adjustControlHandler({
     selector: selector ?? undefined,

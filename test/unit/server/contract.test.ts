@@ -70,6 +70,10 @@ async function run() {
   const adjustControl = toolDefinitions.find((tool) => tool.name === 'adjust_control')
   assert(adjustControl, 'adjust_control should be registered')
   assert.deepStrictEqual((adjustControl as any).inputSchema.required, ['targetValue'])
+  assert.deepStrictEqual((adjustControl as any).inputSchema.oneOf, [
+    { required: ['selector'] },
+    { required: ['element_id'] }
+  ])
   assert.strictEqual((adjustControl as any).inputSchema.properties.targetValue.type, 'number')
   assert.match((adjustControl as any).description, /numeric control value/i)
   assert.match((adjustControl as any).description, /expect_state/i)

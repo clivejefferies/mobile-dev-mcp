@@ -568,11 +568,11 @@ Adjust a numeric control value with verification.
 This is the initial adjustable-control surface for slider-like controls and other controls that expose a numeric value or value_range.
 
 Inputs:
-- selector or element_id
+- exactly one of selector or element_id
 - property (defaults to "value")
 - targetValue
-- tolerance (optional)
-- maxAttempts (optional)
+- tolerance (optional; discrete default is 0, continuous default is max(step / 2, 1% of range) when omitted)
+- maxAttempts (optional; defaults to 5)
 - platform/deviceId (optional)
 
 Output Structure:
@@ -584,14 +584,14 @@ Output Structure:
 - success = true when the control converges within tolerance
 
 Verification Guidance:
-- Prefer direct target placement when value_range is available; fall back to a drag only if the direct tap does not converge
+- Prefer direct platform adjustment when the runtime exposes it; then verified increment/decrement actions; use coordinate fallback only as degraded mode
 - Use expect_state for the control value readback
-- Treat coordinate fallback as degraded mode
+- Do not use derived semantic metadata as proof of success
 
 Failure Handling:
 - ELEMENT_NOT_FOUND → re-resolve the control
 - ELEMENT_NOT_INTERACTABLE → the control cannot be adjusted through the current runtime
-- TIMEOUT → the control did not converge within bounded retries
+- CONTROL_CONVERGENCE_FAILED → the control did not converge within bounded retries or the requested value is out of range
 - UNKNOWN → capture a snapshot and stop`,
     inputSchema: {
       type: 'object',
@@ -608,12 +608,16 @@ Failure Handling:
         element_id: { type: 'string', description: 'Optional previously resolved element identifier.' },
         property: { type: 'string', description: 'Readable numeric state property to adjust.', default: 'value' },
         targetValue: { type: 'number', description: 'Target numeric value.' },
-        tolerance: { type: 'number', description: 'Accepted numeric tolerance around the target value.', default: 0 },
-        maxAttempts: { type: 'number', description: 'Maximum adjustment attempts.', default: 3 },
+        tolerance: { type: 'number', description: 'Accepted numeric tolerance around the target value. Defaults are derived from the readable control domain.' },
+        maxAttempts: { type: 'number', description: 'Maximum adjustment attempts.', default: 5 },
         platform: { type: 'string', enum: ['android', 'ios'], description: 'Optional platform override' },
         deviceId: { type: 'string', description: 'Optional device serial/udid' }
       },
-      required: ['targetValue']
+      required: ['targetValue'],
+      oneOf: [
+        { required: ['selector'] },
+        { required: ['element_id'] }
+      ]
     }
   },
   {

@@ -91,7 +91,9 @@ export interface UIElementState {
   value_range?: {
     min: number;
     max: number;
+    step?: number | null;
   } | null;
+  step?: number | null;
 }
 
 export interface SelectorConfidence {
