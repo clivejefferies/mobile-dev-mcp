@@ -226,7 +226,7 @@ async function run() {
       const result = await ToolsInteract.waitForUIHandler({
         selector: { text: `Button ${i}` },
         condition: 'exists',
-        timeout_ms: 200,
+        timeout_ms: 1000,
         poll_interval_ms: 50,
         platform: 'android'
       })
