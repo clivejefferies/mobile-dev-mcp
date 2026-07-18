@@ -400,30 +400,107 @@ async function run() {
     assert.strictEqual(directAdjust.attempts, 1)
     assert.strictEqual(directCalls, 1)
 
-    ;(Observe as any).ToolsObserve.getUITreeHandler = async () => ({
-      device: { platform: 'ios', id: 'booted', osVersion: '17', model: 'Simulator', simulator: true },
-      screen: '',
-      resolution: { width: 390, height: 844 },
-      elements: [
-        {
-          text: 'Stepper',
-          type: 'XCUIElementTypeStepper',
-          contentDescription: null,
-          clickable: true,
-          enabled: true,
-          visible: true,
-          bounds: [0, 0, 120, 44],
-          resourceId: 'stepper',
-          actions: ['increment', 'decrement'],
-          state: {
-            value: 1,
-            raw_value: 1,
-            value_range: { min: 0, max: 5, step: 1 },
-            step: 1
+    let directRefreshValue = 10
+    let directRefreshTreeFetches = 0
+    ;(Observe as any).ToolsObserve.getUITreeHandler = async () => {
+      directRefreshTreeFetches++
+      return {
+        device: { platform: 'android', id: 'mock-device', osVersion: '14', model: 'Pixel', simulator: true },
+        screen: '',
+        resolution: { width: 1080, height: 2400 },
+        elements: [
+          {
+            text: 'Retrying direct slider',
+            type: 'android.widget.SeekBar',
+            contentDescription: null,
+            clickable: true,
+            enabled: true,
+            visible: true,
+            bounds: [0, 0, 200, 40],
+            resourceId: 'seek_direct_retry',
+            actions: ['ACTION_SET_PROGRESS'],
+            state: {
+              value: directRefreshValue,
+              raw_value: directRefreshValue,
+              value_range: { min: 0, max: 100 }
+            }
+          }
+        ]
+      }
+    }
+
+    let retryingDirectCalls = 0
+    ;(ToolsInteract as any).getInteractionService = async () => ({
+      resolved: { id: 'mock-device' },
+      interact: {
+        setAdjustableValue: async () => {
+          retryingDirectCalls++
+          directRefreshValue = retryingDirectCalls === 1 ? 60 : 80
+          return {
+            device: { platform: 'android', id: 'mock-device', osVersion: '14', model: 'Pixel', simulator: true },
+            success: true
           }
         }
-      ]
+      },
+      platform: 'android'
     })
+
+    ;(ToolsInteract as any).tapHandler = async () => {
+      throw new Error('coordinate fallback should not run before direct retry refreshes state')
+    }
+
+    ;(ToolsInteract as any).expectStateHandler = async () => ({
+      success: directRefreshValue === 80,
+      selector: { text: 'Retrying direct slider' },
+      element_id: null,
+      expected_state: { property: 'value', expected: 80 },
+      observed_state: { property: 'value', value: directRefreshValue, raw_value: directRefreshValue },
+      reason: directRefreshValue === 80 ? 'value matches expected value' : 'direct adjustment partially applied'
+    })
+
+    const retryingDirectAdjust = await ToolsInteract.adjustControlHandler({
+      selector: { text: 'Retrying direct slider' },
+      property: 'value',
+      targetValue: 80,
+      maxAttempts: 2,
+      platform: 'android'
+    })
+
+    assert.strictEqual(retryingDirectAdjust.success, true)
+    assert.strictEqual(retryingDirectAdjust.adjustment_mode, 'semantic')
+    assert.strictEqual(retryingDirectAdjust.attempts, 2)
+    assert.strictEqual(retryingDirectCalls, 2)
+    assert.ok(directRefreshTreeFetches >= 2, 'direct retry should refetch the UI tree instead of cascading into stale coordinate fallback')
+
+    let incrementalTreeValue = 1
+    let incrementalTreeFetches = 0
+    ;(Observe as any).ToolsObserve.getUITreeHandler = async () => {
+      incrementalTreeFetches++
+      return {
+        device: { platform: 'ios', id: 'booted', osVersion: '17', model: 'Simulator', simulator: true },
+        screen: '',
+        resolution: { width: 390, height: 844 },
+        elements: [
+          {
+            text: 'Stepper',
+            type: 'XCUIElementTypeStepper',
+            contentDescription: null,
+            clickable: true,
+            enabled: true,
+            visible: true,
+            bounds: [0, 0, 120, 44],
+            resourceId: 'stepper',
+            actions: ['increment', 'decrement'],
+            state: {
+              value: incrementalTreeValue,
+              raw_value: incrementalTreeValue,
+              value_range: { min: 0, max: 5, step: 1 },
+              step: 1
+            }
+          }
+        ]
+      }
+    }
 
     const directions: string[] = []
     ;(ToolsInteract as any).getInteractionService = async () => ({
@@ -431,6 +508,7 @@ async function run() {
       interact: {
         adjustAccessibleValue: async ({ direction }: any) => {
           directions.push(direction)
+          incrementalTreeValue += direction === 'increment' ? 1 : -1
           return {
             device: { platform: 'ios', id: 'booted', osVersion: '17', model: 'Simulator', simulator: true },
             success: true
@@ -440,17 +518,14 @@ async function run() {
       platform: 'ios'
     })
 
-    let incrementalVerificationCount = 0
     ;(ToolsInteract as any).expectStateHandler = async () => {
-      incrementalVerificationCount++
-      const value = incrementalVerificationCount === 1 ? 2 : 3
       return {
-        success: value === 3,
+        success: incrementalTreeValue === 3,
         selector: { text: 'Stepper' },
         element_id: null,
         expected_state: { property: 'value', expected: 3 },
-        observed_state: { property: 'value', value, raw_value: value },
-        reason: value === 3 ? 'value matches expected value' : 'value still below target'
+        observed_state: { property: 'value', value: incrementalTreeValue, raw_value: incrementalTreeValue },
+        reason: incrementalTreeValue === 3 ? 'value matches expected value' : 'value still below target'
       }
     }
 
@@ -467,6 +542,7 @@ async function run() {
     assert.strictEqual(incrementalAdjust.attempts, 2)
     assert.deepStrictEqual(directions, ['increment', 'increment'])
     assert.strictEqual(incrementalAdjust.target_state.tolerance, 0)
+    assert.ok(incrementalTreeFetches >= 2, 'incremental retry should refetch the UI tree instead of cascading into stale coordinate fallback')
 
     ;(ToolsInteract as any).getInteractionService = originalGetInteractionService
 
@@ -624,36 +700,42 @@ async function run() {
     assert.strictEqual(cachedResolveAdjust.converged, true)
     assert.strictEqual(cachedResolveAdjust.within_tolerance, true)
     assert.strictEqual(cachedResolveAdjust.attempts, 2)
-    assert.strictEqual(treeFetches, 1, 'second attempt should reuse the resolved element instead of refetching the UI tree')
+    assert.ok(treeFetches >= 2, 'second attempt should refetch after a non-converged coordinate tap updates observed state')
 
     const probeTapStart = tapCalls.length
     const probeSwipeStart = swipeCalls.length
-    let probeVerificationCount = 0
-    ;(Observe as any).ToolsObserve.getUITreeHandler = async () => ({
-      device: { platform: 'android', id: 'mock-device', osVersion: '14', model: 'Pixel', simulator: true },
-      screen: '',
-      resolution: { width: 1080, height: 2400 },
-      elements: [
-        {
-          text: 'Duration',
-          type: 'android.widget.SeekBar',
-          contentDescription: null,
-          clickable: true,
-          enabled: true,
-          visible: true,
-          bounds: [0, 0, 200, 40],
-          resourceId: 'seek_duration',
-          state: {
-            value: 10,
-            raw_value: 10,
-            value_range: { min: 0, max: 20 }
+    const probeSwipeFetches: number[] = []
+    let probeTreeValue = 10
+    let probeTreeFetches = 0
+    ;(Observe as any).ToolsObserve.getUITreeHandler = async () => {
+      probeTreeFetches++
+      return {
+        device: { platform: 'android', id: 'mock-device', osVersion: '14', model: 'Pixel', simulator: true },
+        screen: '',
+        resolution: { width: 1080, height: 2400 },
+        elements: [
+          {
+            text: 'Duration',
+            type: 'android.widget.SeekBar',
+            contentDescription: null,
+            clickable: true,
+            enabled: true,
+            visible: true,
+            bounds: [0, 0, 200, 40],
+            resourceId: 'seek_duration',
+            state: {
+              value: probeTreeValue,
+              raw_value: probeTreeValue,
+              value_range: { min: 0, max: 20 }
+            }
           }
-        }
-      ]
-    })
+        ]
+      }
+    }
 
     ;(ToolsInteract as any).tapHandler = async ({ platform, x, y, deviceId }: any) => {
       tapCalls.push({ platform, x, y, deviceId })
+      probeTreeValue = probeTreeValue === 10 ? 11 : 12
       return {
         device: { platform: platform || 'android', id: deviceId || 'mock-device', osVersion: '14', model: 'Pixel', simulator: true },
         success: true,
@@ -661,10 +743,19 @@ async function run() {
         y
       }
     }
+    ;(ToolsInteract as any).swipeHandler = async ({ platform, x1, y1, x2, y2, duration, deviceId }: any) => {
+      probeSwipeFetches.push(probeTreeFetches)
+      swipeCalls.push({ platform, x1, y1, x2, y2, duration, deviceId })
+      return {
+        device: { platform: platform || 'android', id: deviceId || 'mock-device', osVersion: '14', model: 'Pixel', simulator: true },
+        success: true,
+        start: [x1, y1],
+        end: [x2, y2],
+        duration
+      }
+    }
 
     ;(ToolsInteract as any).expectStateHandler = async () => {
-      probeVerificationCount++
-      const value = probeVerificationCount === 1 ? 11 : 12
       return {
         success: true,
         selector: { text: 'Duration' },
@@ -678,10 +769,10 @@ async function run() {
           class: 'android.widget.SeekBar',
           bounds: [0, 0, 200, 40],
           index: 0,
-          state: { value, raw_value: value, value_range: { min: 0, max: 20 } }
+          state: { value: probeTreeValue, raw_value: probeTreeValue, value_range: { min: 0, max: 20 } }
         },
-        observed_state: { property: 'value', value, raw_value: value },
-        reason: value === 12 ? 'value matches expected value' : 'value still below target'
+        observed_state: { property: 'value', value: probeTreeValue, raw_value: probeTreeValue },
+        reason: probeTreeValue === 12 ? 'value matches expected value' : 'value still below target'
       }
     }
 
@@ -698,9 +789,11 @@ async function run() {
     assert.strictEqual(probeAdjust.converged, true)
     assert.strictEqual(probeAdjust.within_tolerance, true)
     assert.strictEqual(probeAdjust.adjustment_mode, 'coordinate')
-    assert.strictEqual(probeAdjust.attempts, 2)
+    assert.strictEqual(probeAdjust.attempts, 3)
     assert.strictEqual(tapCalls.length, probeTapStart + 2)
-    assert.strictEqual(swipeCalls.length, probeSwipeStart)
+    assert.strictEqual(swipeCalls.length, probeSwipeStart + 1)
+    assert.ok(probeTreeFetches >= 2, 'coordinate retry should refetch the UI tree instead of cascading into stale swipe fallback')
+    assert.ok(probeSwipeFetches[0] >= 2, 'swipe fallback should run only after a fresh UI tree read')
 
     let defaultToleranceVerificationCount = 0
     ;(Observe as any).ToolsObserve.getUITreeHandler = async () => ({
@@ -792,6 +885,50 @@ async function run() {
     assert.strictEqual(discreteAdjust.success, true)
     assert.strictEqual(discreteAdjust.target_state.target_value, 10)
     assert.strictEqual(discreteAdjust.target_state.tolerance, 0)
+
+    ;(Observe as any).ToolsObserve.getUITreeHandler = async () => ({
+      device: { platform: 'android', id: 'mock-device', osVersion: '14', model: 'Pixel', simulator: true },
+      screen: '',
+      resolution: { width: 1080, height: 2400 },
+      elements: [
+        {
+          text: 'Scientific step slider',
+          type: 'android.widget.SeekBar',
+          contentDescription: null,
+          clickable: true,
+          enabled: true,
+          visible: true,
+          bounds: [0, 0, 200, 40],
+          resourceId: 'seek_scientific_step',
+          state: {
+            value: 0,
+            raw_value: 0,
+            value_range: { min: 0, max: 0.000001, step: 1e-7 },
+            step: 1e-7
+          }
+        }
+      ]
+    })
+
+    ;(ToolsInteract as any).expectStateHandler = async () => ({
+      success: true,
+      selector: { text: 'Scientific step slider' },
+      element_id: null,
+      expected_state: { property: 'value', expected: 0.0000003 },
+      observed_state: { property: 'value', value: 0.0000003, raw_value: 0.0000003 },
+      reason: 'value matches expected value'
+    })
+
+    const scientificStepAdjust = await ToolsInteract.adjustControlHandler({
+      selector: { text: 'Scientific step slider' },
+      property: 'value',
+      targetValue: 0.00000034,
+      platform: 'android'
+    })
+
+    assert.strictEqual(scientificStepAdjust.success, true)
+    assert.strictEqual(scientificStepAdjust.target_state.target_value, 0.0000003)
+    assert.strictEqual(scientificStepAdjust.target_state.tolerance, 0)
 
     ;(Observe as any).ToolsObserve.getUITreeHandler = async () => ({
       device: { platform: 'android', id: 'mock-device', osVersion: '14', model: 'Pixel', simulator: true },

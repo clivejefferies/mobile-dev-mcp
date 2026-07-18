@@ -797,8 +797,21 @@ export class ToolsInteract {
     if (!step) return targetValue
     const quantized = min + (Math.round((targetValue - min) / step) * step)
     const bounded = Math.max(min, Math.min(max, quantized))
-    const precision = Math.max(0, Math.min(12, String(step).split('.')[1]?.length ?? 0))
+    const precision = ToolsInteract._decimalPrecisionForStep(step)
     return Number(bounded.toFixed(precision))
+  }
+
+  private static _decimalPrecisionForStep(step: number): number {
+    const normalized = String(step).toLowerCase()
+    const [coefficient, exponentPart] = normalized.split('e')
+    const coefficientDecimals = coefficient.includes('.')
+      ? coefficient.split('.')[1]?.length ?? 0
+      : 0
+    const exponent = exponentPart !== undefined ? Number(exponentPart) : 0
+    const precision = exponent < 0
+      ? coefficientDecimals + Math.abs(exponent)
+      : Math.max(0, coefficientDecimals - exponent)
+    return Math.max(0, Math.min(12, precision))
   }
 
   private static _defaultAdjustTolerance(range: { min: number; max: number } | null, step: number | null): number {
@@ -1565,7 +1578,9 @@ export class ToolsInteract {
     let currentDevice: any = undefined
     let attemptCount = 0
     let cachedResolvedMatch: { el: UiElement, idx: number } | null = null
+    let coordinateTapsAwaitingFreshGesture = false
 
+    adjustmentAttempts:
     for (let attempt = 0; attempt < attemptsLimit && attemptCount < attemptsLimit; attempt++) {
       const resolved: {
         tree: any
@@ -1838,6 +1853,11 @@ export class ToolsInteract {
                 adjustment_mode: lastAdjustmentMode
               }
             }
+
+            cachedResolvedMatch = null
+            if (attemptCount < attemptsLimit) {
+              continue
+            }
           }
         }
       }
@@ -1918,6 +1938,11 @@ export class ToolsInteract {
               adjustment_mode: lastAdjustmentMode
             }
           }
+
+          cachedResolvedMatch = null
+          if (attemptCount < attemptsLimit) {
+            continue adjustmentAttempts
+          }
         }
       }
 
@@ -1934,90 +1959,99 @@ export class ToolsInteract {
       const axis = ToolsInteract._controlAxis(currentEl, bounds)
       const targetPoint = ToolsInteract._buildConservativeControlPoint(bounds, normalizedTargetValue, currentValue, min, max, axis)
       const currentPoint = ToolsInteract._buildControlPoint(bounds, (currentValue - min) / (max - min), axis)
-      const probePoints = inferredSliderState
-        ? [targetPoint]
-        : ToolsInteract._buildAdjustmentProbePoints(bounds, normalizedTargetValue, currentValue, min, max, axis)
+      if (!coordinateTapsAwaitingFreshGesture) {
+        const probePoints = inferredSliderState
+          ? [targetPoint]
+          : ToolsInteract._buildAdjustmentProbePoints(bounds, normalizedTargetValue, currentValue, min, max, axis)
 
-      for (let i = 0; i < probePoints.length && attemptCount < attemptsLimit; i++) {
-        const probePoint = probePoints[i]
-        lastAdjustmentMode = 'coordinate'
-        recordTraceStep('execute', 'retry', {
-          attempt: attemptCount + 1,
-          mode: 'coordinate',
-          point: probePoint
-        })
-        const actionResult = await ToolsInteract.tapHandler({
-          platform: resolvedPlatform,
-          x: probePoint.x,
-          y: probePoint.y,
-          deviceId: resolvedDeviceId
-        })
-        attemptCount++
-        actionDevice = actionResult.device ?? actionDevice
-
-        if (!actionResult.success) {
+        for (let i = 0; i < probePoints.length && attemptCount < attemptsLimit; i++) {
+          const probePoint = probePoints[i]
+          lastAdjustmentMode = 'coordinate'
           recordTraceStep('execute', 'retry', {
-            attempt: attemptCount,
+            attempt: attemptCount + 1,
             mode: 'coordinate',
-            point: probePoint,
-            success: false
+            point: probePoint
           })
-          continue
-        }
+          const actionResult = await ToolsInteract.tapHandler({
+            platform: resolvedPlatform,
+            x: probePoint.x,
+            y: probePoint.y,
+            deviceId: resolvedDeviceId
+          })
+          attemptCount++
+          actionDevice = actionResult.device ?? actionDevice
 
-        verificationResult = await runVerification()
-        observedState = verificationResult.observedState
-        lastObservedState = observedState
-        recordTraceStep('verify', verificationResult.withinTolerance ? 'success' : 'retry', {
-          attempt: attemptCount,
-          property,
-          target_value: normalizedTargetValue,
-          actual_state: observedState,
-          reason: verificationResult.verification?.reason ?? 'control did not converge yet'
-        })
+          if (!actionResult.success) {
+            recordTraceStep('execute', 'retry', {
+              attempt: attemptCount,
+              mode: 'coordinate',
+              point: probePoint,
+              success: false
+            })
+            continue
+          }
 
-        if (verificationResult.withinTolerance) {
-          const uiFingerprintAfter = await ToolsInteract._captureFingerprint(resolvedPlatform, resolvedDeviceId)
-          const base = buildActionExecutionResult({
-            actionType,
-            sourceModule: 'interact',
-            device: actionDevice ?? currentDevice,
-            selector: targetSelector,
-            resolved: resolvedTarget,
-            success: true,
-            uiFingerprintBefore: fingerprintBefore,
-            uiFingerprintAfter,
-            details: {
-              target_value: normalizedTargetValue,
-              tolerance: effectiveTolerance,
-              property,
-              attempts: attemptCount,
-              adjustment_mode: lastAdjustmentMode,
-              actual_state: observedState,
-              converged: true,
-              within_tolerance: true,
-              reason: verificationResult.verification?.reason ?? 'control converged to target value'
-            },
-            traceSteps
-          }) as AdjustControlResponse
-
-          return {
-            ...base,
-            target_state: {
-              property,
-              target_value: normalizedTargetValue,
-              tolerance: effectiveTolerance
-            },
+          verificationResult = await runVerification()
+          observedState = verificationResult.observedState
+          lastObservedState = observedState
+          recordTraceStep('verify', verificationResult.withinTolerance ? 'success' : 'retry', {
+            attempt: attemptCount,
+            property,
+            target_value: normalizedTargetValue,
             actual_state: observedState,
-            within_tolerance: true,
-            converged: true,
-            attempts: attemptCount,
-            adjustment_mode: lastAdjustmentMode
+            reason: verificationResult.verification?.reason ?? 'control did not converge yet'
+          })
+
+          if (verificationResult.withinTolerance) {
+            const uiFingerprintAfter = await ToolsInteract._captureFingerprint(resolvedPlatform, resolvedDeviceId)
+            const base = buildActionExecutionResult({
+              actionType,
+              sourceModule: 'interact',
+              device: actionDevice ?? currentDevice,
+              selector: targetSelector,
+              resolved: resolvedTarget,
+              success: true,
+              uiFingerprintBefore: fingerprintBefore,
+              uiFingerprintAfter,
+              details: {
+                target_value: normalizedTargetValue,
+                tolerance: effectiveTolerance,
+                property,
+                attempts: attemptCount,
+                adjustment_mode: lastAdjustmentMode,
+                actual_state: observedState,
+                converged: true,
+                within_tolerance: true,
+                reason: verificationResult.verification?.reason ?? 'control converged to target value'
+              },
+              traceSteps
+            }) as AdjustControlResponse
+
+            return {
+              ...base,
+              target_state: {
+                property,
+                target_value: normalizedTargetValue,
+                tolerance: effectiveTolerance
+              },
+              actual_state: observedState,
+              within_tolerance: true,
+              converged: true,
+              attempts: attemptCount,
+              adjustment_mode: lastAdjustmentMode
+            }
+          }
+
+          coordinateTapsAwaitingFreshGesture = true
+          cachedResolvedMatch = null
+          if (attemptCount < attemptsLimit) {
+            continue adjustmentAttempts
           }
         }
       }
 
       if (attemptCount < attemptsLimit) {
+        coordinateTapsAwaitingFreshGesture = false
         lastAdjustmentMode = 'gesture'
         recordTraceStep('execute', 'retry', {
           attempt: attemptCount + 1,
