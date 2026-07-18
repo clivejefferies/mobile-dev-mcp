@@ -153,6 +153,11 @@ function describeJavaDiscovery(javaHome: string | null): { discoverySource: stri
   return { discoverySource: javaHome ? 'detected' : null, searchedLocations }
 }
 
+function resolveJavaBinaryPath(javaHome: string, hostOs: HostOs): string {
+  const javaBinary = hostOs === 'windows' ? 'java.exe' : 'java'
+  return path.join(javaHome, 'bin', javaBinary)
+}
+
 function buildUnsupportedHostStatus(hostOs: HostOs) {
   const failureMessage = `Host operating system '${hostOs}' is not supported.`
   const remediation = ['Run Mobile Debug MCP on macOS, Linux, or Windows.']
@@ -329,6 +334,26 @@ function buildAndroidPlatform(android: Awaited<ReturnType<typeof checkAndroid>>,
 }
 
 function buildIOSPlatform(ios: Awaited<ReturnType<typeof checkIOS>>, hostSupported: boolean, hostOs: HostOs): PlatformEntry {
+  const platformUnsupported = !hostSupported || hostOs === 'linux' || hostOs === 'windows'
+  if (platformUnsupported) {
+    return {
+      status: 'unsupported',
+      tools: {},
+      providers: {},
+      capabilities: {},
+      devices: [],
+      failures: [
+        makeFailure('PLATFORM_UNAVAILABLE', 'ios', 'iOS tooling is only supported on macOS.', {
+          tool: null,
+          searchedLocations: [],
+          selectedProvider: null,
+          rawVersion: null,
+          remediation: ['Run Mobile Debug MCP on macOS for iOS toolchain discovery.']
+        })
+      ]
+    }
+  }
+
   const xcrunCmd = getXcrunCmd()
   const xcrunProbe = ios.iosAvailable ? probeCommand(xcrunCmd, ['--version']) : { ok: false, raw: null, parsedVersion: null }
   const idbCmd = getIdbCmd()
@@ -348,7 +373,6 @@ function buildIOSPlatform(ios: Awaited<ReturnType<typeof checkIOS>>, hostSupport
     }))
     : []
 
-  const platformUnsupported = !hostSupported || hostOs === 'linux' || hostOs === 'windows'
   const platformUnavailableFailure = !platformUnsupported && !simctlAvailable
     ? makeFailure('PLATFORM_UNAVAILABLE', 'ios', 'iOS tooling is unavailable on this host.', {
       tool: 'xcrun',
@@ -520,9 +544,10 @@ export async function getSystemStatus() {
     const overallStatus = success ? 'ready' : (androidReady || iosReady ? 'degraded' : 'blocked')
 
     const javaHome = gradle.gradleJavaHome || (await detectJavaHome().catch(() => undefined))
-    const javaProbe = javaHome ? probeCommand(path.join(javaHome, 'bin', 'java'), ['-version']) : { ok: false, raw: null, parsedVersion: null }
+    const javaBin = javaHome ? resolveJavaBinaryPath(javaHome, hostOs) : null
+    const javaProbe = javaBin ? probeCommand(javaBin, ['-version']) : { ok: false, raw: null, parsedVersion: null }
     const javaTool = makeToolEntry(
-      javaHome ? path.join(javaHome, 'bin', 'java') : null,
+      javaBin,
       describeJavaDiscovery(javaHome ?? null).discoverySource,
       javaProbe.raw,
       javaProbe.ok ? 'valid' : (javaHome ? 'invalid' : 'missing')

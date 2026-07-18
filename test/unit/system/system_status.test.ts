@@ -142,6 +142,25 @@ async function run() {
     assert.strictEqual((missingXcrun as any).summary.ios.ready, false)
     assert.strictEqual((missingXcrun as any).ios.status, 'unavailable')
 
+    setScenario({
+      MOBILE_DEBUG_MCP_HOST_OS: 'win32',
+      ADB_VERSION_STATUS: '0',
+      ADB_VERSION_OUTPUT: '8.1.0\n',
+      ADB_DEVICES_OUTPUT: 'List of devices attached\nemulator-5554\tdevice product:sdk\n',
+      XCRUN_VERSION_STATUS: '1',
+      XCRUN_VERSION_OUTPUT: 'not found',
+    })
+    const windowsHost = await systemStatus.getSystemStatus()
+    assert.strictEqual((windowsHost as any).host.os, 'windows')
+    assert.strictEqual((windowsHost as any).host.supported, true)
+    assert.strictEqual((windowsHost as any).ios.status, 'unsupported')
+    assert.deepStrictEqual((windowsHost as any).ios.tools, {})
+    assert.deepStrictEqual((windowsHost as any).ios.providers, {})
+    assert.deepStrictEqual((windowsHost as any).ios.capabilities, {})
+    assert.deepStrictEqual((windowsHost as any).ios.devices, [])
+    assert.strictEqual((windowsHost as any).ios.failures[0].code, 'PLATFORM_UNAVAILABLE')
+    assert.strictEqual((windowsHost as any).summary.ios.ready, false)
+
     setScenario({ MOBILE_DEBUG_MCP_HOST_OS: 'freebsd' })
     const unsupported = await systemStatus.getSystemStatus()
     assert.strictEqual((unsupported as any).host.os, 'freebsd')

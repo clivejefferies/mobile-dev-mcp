@@ -87,10 +87,18 @@ export function probeIdb(cmd = getIdbCmd()): { ok: boolean; raw: string | null; 
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 5000
     })
+    if (result.status !== 0) {
+      return {
+        ok: false,
+        raw: `${result.stdout || ''}${result.stderr || ''}`.trim() || null,
+        parsedVersion: null
+      }
+    }
+
     const version = getIdbPackageVersion()
     const raw = version ? `fb-idb ${version}` : `${result.stdout || ''}${result.stderr || ''}`.trim() || null
     return {
-      ok: result.status === 0,
+      ok: true,
       raw,
       parsedVersion: version
     }
