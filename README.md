@@ -18,12 +18,13 @@ A minimal, secure MCP server for AI-assisted mobile development. Build, install,
 
 ## Environment Setup
 
-The server can discover tools automatically from standard locations, or you can point it at explicit binaries with environment variables.
+The server discovers Android and iOS tools automatically from standard locations by default. Manual environment setup is still supported, but it should be treated as the fallback for non-standard installs, overrides, or reproducible pinned toolchains.
 
 Use explicit paths when:
 - you have multiple SDKs installed
 - the tools live outside standard locations
 - you want deterministic setup across machines
+- automatic discovery does not find the expected binary
 
 Leave the variables unset when:
 - the tools are already on `PATH`
@@ -35,6 +36,8 @@ Common environment variables:
 - `XCRUN_PATH`: explicit path to `xcrun`
 - `MCP_IDB_PATH` or `IDB_PATH`: explicit path to `idb`
 - `GRADLE_JAVA_HOME` or `JAVA_HOME`: Java home for Gradle-backed operations
+
+For normal use, call `get_system_status` first. It reports the detected host, Android, and iOS toolchain state so the client can decide whether automatic discovery is sufficient or whether explicit overrides are needed.
 
 ## Configuration
 
@@ -60,7 +63,7 @@ Recommended when you want Android only, or when you want to make the Android too
 }
 ```
 
-For Android-only setups, `XCRUN_PATH` and `IDB_PATH` are not required.
+For Android-only setups, `XCRUN_PATH` and `IDB_PATH` are not required unless you want to pin them explicitly.
 
 </details>
 
@@ -86,7 +89,7 @@ Recommended when you want iOS simulator or device support, or when `idb` lives i
 }
 ```
 
-For iOS-only setups, `ADB_PATH` and `ANDROID_SDK_ROOT` are not required.
+For iOS-only setups, `ADB_PATH` and `ANDROID_SDK_ROOT` are not required unless you want to pin them explicitly.
 
 </details>
 

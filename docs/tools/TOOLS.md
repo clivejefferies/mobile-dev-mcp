@@ -17,4 +17,6 @@ For interactive flows, the intended deterministic pattern is:
 - **expect_\*** tools are for final outcome verification
 - observation tools are supporting context, not primary success signals
 
+For environment-sensitive work, call `get_system_status` first so the client can rely on automatic discovery when it is available and fall back to explicit tool paths only when needed.
+
 Use the linked documents below for per-tool inputs, outputs, and usage guidance.

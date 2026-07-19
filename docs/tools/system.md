@@ -72,5 +72,6 @@ Usage guidance:
 - If `success: false`, attempt recovery steps or report issues to the user.
 
 Recommended setup patterns:
-- Android: set `ADB_PATH` if you want an explicit adb binary, or set `ANDROID_SDK_ROOT`/`ANDROID_HOME` and let the server discover `platform-tools/adb`.
-- iOS: set `XCRUN_PATH` if Xcode tools are not on `PATH`, and set `MCP_IDB_PATH` or `IDB_PATH` when `idb` lives outside the default search paths.
+- Default: let the server discover tools automatically from standard locations and call `get_system_status` first to confirm what is available.
+- Android: set `ADB_PATH` only if you want to override the discovered `adb` binary, or set `ANDROID_SDK_ROOT`/`ANDROID_HOME` when discovery needs help finding `platform-tools/adb`.
+- iOS: set `XCRUN_PATH` only if Xcode tools are not on `PATH`, and set `MCP_IDB_PATH` or `IDB_PATH` only when `idb` lives outside the default search paths.
