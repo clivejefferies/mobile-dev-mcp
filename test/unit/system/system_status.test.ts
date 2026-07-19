@@ -83,6 +83,7 @@ async function run() {
     process.env.XCRUN_PATH = xcrunPath
 
     setScenario({
+      MOBILE_DEBUG_MCP_HOST_OS: 'darwin',
       ADB_VERSION_STATUS: '0',
       ADB_VERSION_OUTPUT: '8.1.0\n',
       ADB_DEVICES_OUTPUT: 'List of devices attached\nemulator-5554\tdevice product:sdk\n',
@@ -104,6 +105,7 @@ async function run() {
     assert.strictEqual(typeof (healthy as any).summary.ios.summary, 'string')
 
     setScenario({
+      MOBILE_DEBUG_MCP_HOST_OS: 'darwin',
       ADB_VERSION_STATUS: '1',
       ADB_VERSION_OUTPUT: 'not found',
       ADB_DEVICES_OUTPUT: 'List of devices attached\n',
@@ -116,6 +118,7 @@ async function run() {
     assert(missingAdb.issues.some((issue: string) => issue.includes('ADB')))
 
     setScenario({
+      MOBILE_DEBUG_MCP_HOST_OS: 'darwin',
       ADB_VERSION_STATUS: '0',
       ADB_VERSION_OUTPUT: '8.1.0\n',
       ADB_DEVICES_OUTPUT: 'List of devices attached\nserial1\tunauthorized\nserial2\toffline\n',
@@ -129,6 +132,7 @@ async function run() {
     assert(unauthorized.issues.some((issue: string) => issue.includes('offline')))
 
     setScenario({
+      MOBILE_DEBUG_MCP_HOST_OS: 'darwin',
       ADB_VERSION_STATUS: '0',
       ADB_VERSION_OUTPUT: '8.1.0\n',
       ADB_DEVICES_OUTPUT: 'List of devices attached\nemulator-5554\tdevice product:sdk\n',
