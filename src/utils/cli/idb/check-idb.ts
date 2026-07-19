@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execSync, spawnSync } from 'child_process'
 import { main as installMain } from './install-idb.js'
-import { getIdbCmd, isIDBInstalled } from './idb-helper.js'
+import { getIdbCmd, getIdbPackageVersion, isIDBInstalled } from './idb-helper.js'
 
 function which(cmd: string): string | null {
   try {
@@ -48,7 +48,16 @@ try {
   const idb = process.env.IDB_PATH || getIdbCmd()
   print('idb:', idb)
   if (idb && isIDBInstalled()) {
-    try { print('idb --version:', execSync(`${idb} --version`, { stdio: ['ignore','pipe','ignore'] }).toString().trim()) } catch (e) { print('idb --version: (failed)', e instanceof Error ? e.message : String(e)) }
+    const version = getIdbPackageVersion()
+    if (version) print('fb-idb version:', version)
+    try {
+      const output = execSync(`${idb} list-targets --json`, { stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000 }).toString().trim()
+      print('idb list-targets --json: ok')
+      if (output) print(output)
+    } catch (e) {
+      print('idb list-targets --json: (failed)', e instanceof Error ? e.message : String(e))
+      process.exit(2)
+    }
     const companion = which('idb_companion')
     print('which idb_companion:', companion)
     if (companion) try { print('idb_companion --version:', execSync('idb_companion --version', { stdio: ['ignore','pipe','ignore'] }).toString().trim()) } catch (e) { print('idb_companion --version: (failed)', e instanceof Error ? e.message : String(e)) }

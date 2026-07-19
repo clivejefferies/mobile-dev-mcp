@@ -74,6 +74,7 @@ async function run() {
     XCRUN_VERSION_OUTPUT: process.env.XCRUN_VERSION_OUTPUT,
     XCRUN_VERSION_STATUS: process.env.XCRUN_VERSION_STATUS,
     SIMCTL_LIST_OUTPUT: process.env.SIMCTL_LIST_OUTPUT,
+    MOBILE_DEBUG_MCP_HOST_OS: process.env.MOBILE_DEBUG_MCP_HOST_OS,
   }
 
   try {
@@ -82,6 +83,7 @@ async function run() {
     process.env.XCRUN_PATH = xcrunPath
 
     setScenario({
+      MOBILE_DEBUG_MCP_HOST_OS: 'darwin',
       ADB_VERSION_STATUS: '0',
       ADB_VERSION_OUTPUT: '8.1.0\n',
       ADB_DEVICES_OUTPUT: 'List of devices attached\nemulator-5554\tdevice product:sdk\n',
@@ -94,12 +96,16 @@ async function run() {
     const healthy = await systemStatus.getSystemStatus()
     assert.strictEqual(healthy.success, true)
     assert.strictEqual((healthy as any).status, 'ready')
+    assert.strictEqual((healthy as any).host.supported, true)
     assert.strictEqual(healthy.adbAvailable, true)
     assert.strictEqual(typeof healthy.adbVersion, 'string')
+    assert.strictEqual((healthy as any).android.status, 'ready')
+    assert.strictEqual((healthy as any).ios.status, 'ready')
     assert.strictEqual((healthy as any).summary.android.ready, true)
     assert.strictEqual(typeof (healthy as any).summary.ios.summary, 'string')
 
     setScenario({
+      MOBILE_DEBUG_MCP_HOST_OS: 'darwin',
       ADB_VERSION_STATUS: '1',
       ADB_VERSION_OUTPUT: 'not found',
       ADB_DEVICES_OUTPUT: 'List of devices attached\n',
@@ -112,6 +118,7 @@ async function run() {
     assert(missingAdb.issues.some((issue: string) => issue.includes('ADB')))
 
     setScenario({
+      MOBILE_DEBUG_MCP_HOST_OS: 'darwin',
       ADB_VERSION_STATUS: '0',
       ADB_VERSION_OUTPUT: '8.1.0\n',
       ADB_DEVICES_OUTPUT: 'List of devices attached\nserial1\tunauthorized\nserial2\toffline\n',
@@ -125,6 +132,7 @@ async function run() {
     assert(unauthorized.issues.some((issue: string) => issue.includes('offline')))
 
     setScenario({
+      MOBILE_DEBUG_MCP_HOST_OS: 'darwin',
       ADB_VERSION_STATUS: '0',
       ADB_VERSION_OUTPUT: '8.1.0\n',
       ADB_DEVICES_OUTPUT: 'List of devices attached\nemulator-5554\tdevice product:sdk\n',
@@ -136,6 +144,38 @@ async function run() {
     assert.strictEqual(missingXcrun.adbAvailable, true)
     assert.strictEqual(Array.isArray(missingXcrun.issues), true)
     assert.strictEqual((missingXcrun as any).summary.ios.ready, false)
+    assert.strictEqual((missingXcrun as any).ios.status, 'unavailable')
+
+    setScenario({
+      MOBILE_DEBUG_MCP_HOST_OS: 'win32',
+      ADB_VERSION_STATUS: '0',
+      ADB_VERSION_OUTPUT: '8.1.0\n',
+      ADB_DEVICES_OUTPUT: 'List of devices attached\nemulator-5554\tdevice product:sdk\n',
+      XCRUN_VERSION_STATUS: '1',
+      XCRUN_VERSION_OUTPUT: 'not found',
+    })
+    const windowsHost = await systemStatus.getSystemStatus()
+    assert.strictEqual((windowsHost as any).host.os, 'windows')
+    assert.strictEqual((windowsHost as any).host.supported, true)
+    assert.strictEqual((windowsHost as any).ios.status, 'unsupported')
+    assert.deepStrictEqual((windowsHost as any).ios.tools, {})
+    assert.deepStrictEqual((windowsHost as any).ios.providers, {})
+    assert.deepStrictEqual((windowsHost as any).ios.capabilities, {})
+    assert.deepStrictEqual((windowsHost as any).ios.devices, [])
+    assert.strictEqual((windowsHost as any).ios.failures[0].code, 'PLATFORM_UNAVAILABLE')
+    assert.strictEqual((windowsHost as any).summary.ios.ready, false)
+
+    setScenario({ MOBILE_DEBUG_MCP_HOST_OS: 'freebsd' })
+    const unsupported = await systemStatus.getSystemStatus()
+    assert.strictEqual((unsupported as any).host.os, 'freebsd')
+    assert.strictEqual((unsupported as any).host.supported, false)
+    assert.strictEqual((unsupported as any).android.status, 'unsupported')
+    assert.strictEqual((unsupported as any).ios.status, 'unsupported')
+    assert.strictEqual((unsupported as any).android.failures[0].code, 'HOST_OS_UNSUPPORTED')
+    assert.strictEqual((unsupported as any).ios.failures[0].code, 'HOST_OS_UNSUPPORTED')
+    assert.strictEqual(unsupported.adbAvailable, false)
+    assert.strictEqual(unsupported.iosAvailable, false)
+    assert.strictEqual((unsupported as any).summary.overall, 'blocked')
 
     console.log('system_status checks passed')
   } finally {

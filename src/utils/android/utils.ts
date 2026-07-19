@@ -20,8 +20,10 @@ function findInPath(cmd: string): string | null {
 }
 
 export function resolveAdbCmd(): string {
-  // Priority: explicit env ADB_PATH -> ANDROID_SDK_ROOT/platform-tools/adb -> ANDROID_HOME/platform-tools/adb -> ~/Library/Android/sdk/platform-tools/adb -> PATH discovery -> 'adb'
+  // Priority: explicit env ADB_PATH -> PATH -> known SDK locations -> fallback to 'adb'
   if (process.env.ADB_PATH && process.env.ADB_PATH.trim()) return process.env.ADB_PATH
+  const found = findInPath('adb')
+  if (found) return found
   const sdkRoot = process.env.ANDROID_SDK_ROOT || process.env.ANDROID_HOME
   if (sdkRoot) {
     const candidate = path.join(sdkRoot, 'platform-tools', process.platform === 'win32' ? 'adb.exe' : 'adb')
@@ -30,8 +32,6 @@ export function resolveAdbCmd(): string {
   // common macOS user SDK path
   const homeSdk = path.join(process.env.HOME || '', 'Library', 'Android', 'sdk', 'platform-tools', process.platform === 'win32' ? 'adb.exe' : 'adb')
   if (existsSync(homeSdk)) return homeSdk
-  const found = findInPath('adb')
-  if (found) return found
   return 'adb'
 }
 

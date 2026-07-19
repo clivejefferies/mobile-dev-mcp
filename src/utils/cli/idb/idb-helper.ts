@@ -59,17 +59,54 @@ export function getIdbCmd(): string | null {
   return null
 }
 
+export function getIdbPackageVersion(): string | null {
+  const runners = ['python3', 'python']
+  for (const runner of runners) {
+    try {
+      const result = spawnSync(runner, ['-m', 'pip', 'show', 'fb-idb'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe']
+      })
+      if (result.status !== 0) continue
+      const output = `${result.stdout || ''}\n${result.stderr || ''}`
+      const match = output.match(/^Version:\s*(.+)$/mi)
+      if (match?.[1]) return match[1].trim()
+    } catch {
+      continue
+    }
+  }
+  return null
+}
+
+export function probeIdb(cmd = getIdbCmd()): { ok: boolean; raw: string | null; parsedVersion: string | null } {
+  if (!cmd) return { ok: false, raw: null, parsedVersion: null }
+
+  try {
+    const result = spawnSync(cmd, ['list-targets', '--json'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 5000
+    })
+    if (result.status !== 0) {
+      return {
+        ok: false,
+        raw: `${result.stdout || ''}${result.stderr || ''}`.trim() || null,
+        parsedVersion: null
+      }
+    }
+
+    const version = getIdbPackageVersion()
+    const raw = version ? `fb-idb ${version}` : `${result.stdout || ''}${result.stderr || ''}`.trim() || null
+    return {
+      ok: true,
+      raw,
+      parsedVersion: version
+    }
+  } catch {
+    return { ok: false, raw: null, parsedVersion: null }
+  }
+}
+
 export function isIDBInstalled(): boolean {
-  const cmd = getIdbCmd()
-  if (!cmd) return false
-  try {
-    // command -v <cmd>
-    const r = spawnSync('command', ['-v', cmd], { stdio: ['ignore', 'pipe', 'ignore'] })
-    if (r && r.status === 0) return true
-  } catch {}
-  try {
-    execSync(`${cmd} list-targets --json`, { stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000 })
-    return true
-  } catch {}
-  return false
+  return probeIdb().ok
 }

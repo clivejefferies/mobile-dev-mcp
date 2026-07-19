@@ -283,7 +283,7 @@ export class iOSManage {
           // Gather diagnostics for simctl failure
           const diag = execCommandWithDiagnostics(['simctl', 'install', deviceId, toInstall], deviceId)
           try {
-            const child = spawn(getIdbCmd(), ['--version'])
+            const child = spawn(getIdbCmd(), ['list-targets', '--json'])
             const idbExists = await new Promise<boolean>((resolve) => {
               child.on('error', () => resolve(false));
               child.on('close', (code) => resolve(code === 0));

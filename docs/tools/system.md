@@ -49,13 +49,15 @@ Response (example):
 }
 ```
 
+The response is additive: the existing flat fields remain available, and the nested `host`, `android`, and `ios` objects are added alongside them.
+
 Checks performed (fast, best-effort):
 - ADB availability and version (adb --version)
 - Connected Android devices (adb devices -l), counts and state summary (device/unauthorized/offline)
 - Log access probe (adb logcat -d -t 1)
-- Android environment variables (ANDROID_SDK_ROOT / ANDROID_HOME / PATH contains adb)
+- Android environment variables and discovery order (`ADB_PATH`, then `ANDROID_SDK_ROOT`/`ANDROID_HOME`, then `PATH`)
 - Optional: app installation check if MCP_TARGET_PACKAGE/MCP_TARGET_APP_ID is set (pm path)
-- Basic iOS checks (xcrun --version and simctl list devices booted)
+- Basic iOS checks (`XCRUN_PATH`, `MCP_IDB_PATH`/`IDB_PATH`, and `simctl` booted-device discovery)
 
 Behavior notes:
 - Always returns structured JSON and never throws; any failures are surfaced in the `issues` array.
@@ -68,3 +70,8 @@ Usage guidance:
 - Call before build/install flows to avoid wasted build attempts on misconfigured systems.
 - Call early in a session when device or toolchain availability is uncertain.
 - If `success: false`, attempt recovery steps or report issues to the user.
+
+Recommended setup patterns:
+- Default: let the server discover tools automatically from standard locations and call `get_system_status` first to confirm what is available.
+- Android: set `ADB_PATH` only if you want to override the discovered `adb` binary, or set `ANDROID_SDK_ROOT`/`ANDROID_HOME` when discovery needs help finding `platform-tools/adb`.
+- iOS: set `XCRUN_PATH` only if Xcode tools are not on `PATH`, and set `MCP_IDB_PATH` or `IDB_PATH` only when `idb` lives outside the default search paths.
