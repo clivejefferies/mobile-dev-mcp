@@ -18,6 +18,7 @@ export interface NetworkEvent {
   networkError: NetworkErrorCode | null
   status: NetworkActivityStatus
   durationMs: number
+  timestampMs: number
 }
 
 export interface GetNetworkActivityResult {
@@ -169,7 +170,7 @@ function filterToSignificantEvents(events: NetworkEvent[]): NetworkEvent[] {
 }
 
 /** Exported for unit testing. */
-export function parseMessageToEvent(message: string): NetworkEvent | null {
+export function parseMessageToEvent(message: string, timestampMs: number = Date.now()): NetworkEvent | null {
   const url = extractUrl(message)
   const path = url ? null : extractPath(message)
   const method = extractMethod(message)
@@ -185,7 +186,8 @@ export function parseMessageToEvent(message: string): NetworkEvent | null {
     statusCode,
     networkError,
     status: classifyStatus(statusCode, networkError),
-    durationMs: 0
+    durationMs: 0,
+    timestampMs
   }
 }
 
@@ -203,7 +205,7 @@ async function getAndroidEvents(sinceMs: number, deviceId?: string): Promise<Net
         const ts = new Date(parsed._iso).getTime()
         if (ts > 0 && ts <= sinceMs) continue
       }
-      const event = parseMessageToEvent(parsed.message || line)
+      const event = parseMessageToEvent(parsed.message || line, parsed._iso ? new Date(parsed._iso).getTime() : Date.now())
       if (event) events.push(event)
     }
     return events
@@ -233,7 +235,7 @@ async function getIOSEvents(sinceMs: number, deviceId = 'booted'): Promise<Netwo
         const ts = new Date(tsMatch[1]).getTime()
         if (ts > 0 && ts <= sinceMs) continue
       }
-      const event = parseMessageToEvent(line)
+      const event = parseMessageToEvent(line, tsMatch ? new Date(tsMatch[1]).getTime() : Date.now())
       if (event) events.push(event)
     }
     return events

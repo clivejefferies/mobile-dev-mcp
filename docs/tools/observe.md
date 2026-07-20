@@ -122,6 +122,9 @@ Input:
   "reason": "optional string describing why snapshot is taken",
   "includeLogs": true,
   "logLines": 200,
+  "collection_window_ms": 10000,
+  "include_uncorrelated": false,
+  "action_id": "tap_1710000000000_1",
   "platform": "android | ios",
   "appId": "optional package/bundle id to scope logs",
   "deviceId": "optional device serial/udid",
@@ -138,6 +141,7 @@ Behavior:
 - Returns a dual-layer payload:
   - `raw` is authoritative and contains the underlying observation data unchanged.
 - `semantic` is optional, derived from `raw`, and intended for planning only.
+- `semantic.diagnostics` carries normalized diagnostic signals, collection window metadata, and structured error payloads.
 - `raw` now includes `snapshot_revision`, `captured_at_ms`, and `loading_state` when detectable.
 
 Response (example):

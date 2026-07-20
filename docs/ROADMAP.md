@@ -11,10 +11,10 @@
 - Actionability Resolution
 - Environment Auto-Configuration and Toolchain Discovery
 - Adjustable Control Support
+- Adjustable Control Precision Hardening
 
 ## Todo
 
-- Adjustable Control Precision Hardening
 - Signal-Oriented Diagnostic Filtering
 - Long Press Gesture
 - Runtime Debugger Introspection
@@ -302,7 +302,7 @@ Blocks or strengthens:
 ## Rationale
 Post-implementation feedback shows semantics exist, but fine-grained adjustable targeting and convergence still need hardening.
 
-**Status:** Planned
+**Status:** Completed
 
 Addresses friction around:
 - slider thumb targeting precision

@@ -236,6 +236,7 @@ export interface SnapshotSemanticResponse {
   actions_available: string[] | null;
   confidence: number;
   warnings: string[];
+  diagnostics?: NormalizedDiagnostics | null;
 }
 
 export interface CaptureDebugSnapshotRawResponse {
@@ -256,6 +257,83 @@ export interface CaptureDebugSnapshotRawResponse {
   fingerprint_error?: string;
   ui_tree_error?: string;
   logs_error?: string;
+  network_activity_error?: string;
+}
+
+export type DiagnosticSourceKind =
+  | 'log'
+  | 'trace'
+  | 'network'
+  | 'ui'
+  | 'navigation'
+  | 'lifecycle'
+  | 'performance'
+  | 'exception'
+  | 'crash'
+  | 'anr'
+  | 'custom'
+
+export type DiagnosticProvider =
+  | 'logcat'
+  | 'unified_logging'
+  | 'network_activity'
+  | 'action_trace'
+  | 'snapshot'
+  | 'ui_tree'
+  | 'current_screen'
+  | 'screen_fingerprint'
+  | 'log_stream'
+
+export type DiagnosticCategory =
+  | 'UI'
+  | 'Navigation'
+  | 'Lifecycle'
+  | 'Network'
+  | 'Database'
+  | 'Performance'
+  | 'Exception'
+  | 'Crash'
+  | 'Accessibility'
+  | 'Custom'
+
+export type DiagnosticSeverity = 'VERBOSE' | 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'FATAL'
+
+export type JSONValue = null | boolean | number | string | JSONValue[] | { [key: string]: JSONValue }
+
+export interface NormalizedDiagnosticSignal {
+  signal_id: string;
+  action_id: string | null;
+  trace_id: string | null;
+  timestamp_epoch_ms: number;
+  platform: 'android' | 'ios';
+  provider: DiagnosticProvider;
+  provider_sequence: number;
+  source_kind: DiagnosticSourceKind;
+  category: DiagnosticCategory;
+  severity: DiagnosticSeverity;
+  relevance_score: number;
+  raw_payload: JSONValue;
+  normalized_payload: { [key: string]: JSONValue };
+  correlated: boolean;
+}
+
+export interface DiagnosticCollectionWindow {
+  scope: 'request';
+  duration_ms: number;
+  started_at_ms: number;
+  ended_at_ms: number;
+}
+
+export interface DiagnosticErrorPayload {
+  code: 'SIGNAL_SOURCE_UNAVAILABLE' | 'SIGNAL_TIMEOUT' | 'SIGNAL_PARSE_FAILED' | 'UNSUPPORTED_SIGNAL_SOURCE';
+  message: string;
+  details?: { [key: string]: JSONValue };
+}
+
+export interface NormalizedDiagnostics {
+  collection_window: DiagnosticCollectionWindow;
+  signals: NormalizedDiagnosticSignal[];
+  errors: DiagnosticErrorPayload[];
 }
 
 export interface CaptureDebugSnapshotResponse {

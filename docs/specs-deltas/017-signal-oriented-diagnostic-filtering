@@ -1,0 +1,567 @@
+# Specification 017 — Signal-Oriented Diagnostic Filtering
+
+## Purpose
+
+Enable the Mobile Debug MCP to capture, normalise, filter, correlate, and rank runtime diagnostics so agents receive only signals that are relevant to the action they are attempting to perform.
+
+This specification defines the public contract first. The implementation must not rely on an implied internal model.
+
+---
+
+## Public Contract
+
+The canonical public surface for this specification is `capture_debug_snapshot`.
+
+`capture_debug_snapshot` MUST be extended with a normalized diagnostic payload under `semantic.diagnostics`. The existing `get_logs` and `read_log_stream` tools remain source providers and MAY continue to expose their current response shapes. Their output is consumed by `capture_debug_snapshot` and mapped into the normalized model defined below.
+
+`get_network_activity` and `ActionTrace` are supporting source inputs for the same normalized model.
+
+### Request inputs
+
+`capture_debug_snapshot` MUST accept the following additional request fields:
+
+- `collection_window_ms?: number`
+- `include_uncorrelated?: boolean`
+- `action_id?: string`
+
+`collection_window_ms` controls the request window described below.
+`include_uncorrelated` defaults to `false`.
+`action_id` is the correlation key from `ActionTrace.action_id`.
+
+### Canonical diagnostic payload
+
+```json
+{
+  "raw": {
+    "...": "existing snapshot payload"
+  },
+  "semantic": {
+    "...": "existing semantic fields",
+    "diagnostics": {
+      "collection_window": {
+        "scope": "request",
+        "duration_ms": 10000,
+        "started_at_ms": 1710000000000,
+        "ended_at_ms": 1710000010000
+      },
+      "signals": [],
+      "errors": []
+    }
+  }
+}
+```
+
+Errors returned inside semantic.diagnostics.errors represent source-specific diagnostic collection failures that occurred while producing an otherwise successful snapshot. Tool-level invocation failures continue to use the existing top-level error response defined by the MCP protocol. These mechanisms are complementary and MUST NOT be conflated.
+
+The `collection_window` values are deterministic and required when diagnostics are returned.
+
+---
+
+## Goals
+
+- Capture diagnostic signals from multiple runtime sources.
+- Normalise platform-specific events into a common model.
+- Filter unrelated diagnostic noise.
+- Correlate signals with user actions and execution traces.
+- Rank signals deterministically.
+- Provide stable diagnostic results across platforms.
+
+---
+
+## Non-Goals
+
+This specification does not:
+
+- Replace platform logging systems.
+- Perform root-cause analysis.
+- Inspect debugger memory.
+- Modify application logging.
+- Introduce custom instrumentation into applications.
+
+---
+
+## Scope
+
+### Android sources in scope
+
+- `logcat`
+- `activity_lifecycle`
+- `process_lifecycle`
+- `runtime_exception`
+- `anr`
+- `network_activity`
+
+### iOS sources in scope
+
+- `unified_logging`
+- `process_lifecycle`
+- `runtime_exception`
+- `crash_diagnostic`
+- `network_activity`
+
+### Shared sources in scope
+
+- `get_logs`
+- `read_log_stream`
+- `get_network_activity`
+- `ActionTrace`
+- `capture_debug_snapshot`
+
+### Future work
+
+The following are explicitly out of scope for this spec:
+
+- app-specific custom instrumentation streams that are not already surfaced by the runtime tools
+- distributed trace correlation beyond the current action trace model
+- AI-assisted root-cause analysis
+- platform-private diagnostics that are not exposed through the tools above
+
+---
+
+## Trace Identity
+
+The codebase currently exposes `ActionTrace.action_id` and does not define a separate trace identifier.
+
+For this specification:
+
+- `action_id` is the canonical trace identifier.
+- `trace_id` MUST be present on normalized diagnostic signals.
+- `trace_id` MUST equal `action_id` for correlated signals.
+- Implementations MUST NOT generate a distinct trace ID unless the trace model is updated everywhere else in the codebase.
+
+This keeps the spec aligned with the existing `ActionTrace` model while still giving the normalized diagnostic payload a stable field name.
+
+---
+
+## Collection Window
+
+Collection is per request, not per session.
+
+### Default
+
+- Default duration: `10000` ms
+- Minimum supported duration: `1000` ms
+- Maximum supported duration: `60000` ms
+
+### Configuration
+
+The request MAY provide `collection_window_ms`.
+
+If omitted, the default is used.
+
+### Timing
+
+- The window starts at `request_started_at_epoch_ms - collection_window_ms`.
+- The window ends at `request_started_at_epoch_ms`.
+- The request timestamp is the point at which the diagnostics surface is invoked.
+
+All public timestamps in this specification MUST use Unix epoch milliseconds in UTC. The MCP process wall clock is the authoritative clock for request and collection-window boundaries. ActionTrace and provider timestamps MUST be converted to the same epoch-millisecond representation before correlation.
+
+---
+
+## Signal Model
+
+Every retained signal MUST conform to the following schema.
+
+```ts
+type JSONValue = null | boolean | number | string | JSONValue[] | JSONObject;
+
+interface JSONObject {
+  [key: string]: JSONValue;
+}
+
+interface NormalizedDiagnosticSignal {
+  signal_id: string;
+  action_id: string | null;
+  trace_id: string | null;
+  timestamp_epoch_ms: number;
+  platform: 'android' | 'ios';
+  provider: 'logcat' | 'unified_logging' | 'network_activity' | 'action_trace' | 'snapshot' | 'ui_tree' | 'current_screen' | 'screen_fingerprint' | 'log_stream';
+  source_kind: 'log' | 'trace' | 'network' | 'ui' | 'navigation' | 'lifecycle' | 'performance' | 'exception' | 'crash' | 'anr' | 'custom';
+  category: 'UI' | 'Navigation' | 'Lifecycle' | 'Network' | 'Database' | 'Performance' | 'Exception' | 'Crash' | 'Accessibility' | 'Custom';
+  severity: 'VERBOSE' | 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'FATAL';
+  relevance_score: number;
+  raw_payload: JSONValue;
+  normalized_payload: JSONObject;
+  correlated: boolean;
+}
+```
+
+```json
+{
+  "signal_id": "9a8f1b8b1f0c4f7d91d0b0d5c8b8f3e1",
+  "provider": "logcat",
+  "source_kind": "exception",
+  "category": "Exception",
+  "severity": "ERROR"
+}
+```
+
+In this example, provider identifies the acquisition mechanism (logcat) while source_kind identifies the semantic nature of the retained event (exception). These concepts MUST remain distinct throughout the implementation.
+
+### Schema rules
+
+- signal_id MUST be unique within the returned payload.
+- signal_id MUST be generated deterministically as follows:
+  1. Canonicalize normalized_payload using UTF-8 encoding, stable lexicographic key ordering, normalized line endings, and no insignificant whitespace.
+  2. Concatenate platform, provider, source_kind, timestamp_epoch_ms, action_id, trace_id, provider_sequence, and the canonicalized normalized_payload using a single literal | delimiter.
+  3. Compute the SHA-256 digest of that string.
+  4. Return the first 32 lowercase hexadecimal characters as signal_id.
+- provider_sequence MUST be a monotonically increasing integer assigned by the source adapter within the current collection request and MUST participate in signal_id generation and stable ordering.
+- action_id and trace_id MUST be equal for correlated signals.
+- action_id and trace_id MUST be `null` for uncorrelated signals.
+- raw_payload is the original JSON-serializable payload from the source tool.
+- timestamp_epoch_ms MUST be a Unix epoch timestamp in milliseconds, expressed in UTC.
+- All providers MUST convert native platform timestamps to timestamp_epoch_ms before normalization.
+- The MCP process wall clock defines collection-window boundaries; provider-native clocks MUST NOT independently open or close the window.
+- normalized_payload is the deterministic normalized form used for ranking and downstream consumption.
+- relevance_score MUST be a deterministic integer in the range `0` to `1000`.
+- correlated MUST be `true` only when the signal is linked to a known action trace.
+
+### Uncorrelated signals
+
+Uncorrelated signals are NOT included by default.
+
+They MAY be returned only when explicitly requested by the caller, and when returned they MUST be marked with `correlated: false` and `action_id: null`, `trace_id: null`.
+
+### Request and response coupling
+
+The canonical `capture_debug_snapshot` request and response MUST be updated in lockstep with this schema. The tool input schema MUST accept `collection_window_ms`, `include_uncorrelated`, and `action_id`, and the response schema MUST expose `semantic.diagnostics.collection_window`, `semantic.diagnostics.signals`, and `semantic.diagnostics.errors`.
+
+---
+
+## Signal Categories
+
+Signals shall be classified into one or more categories:
+
+- UI
+- Navigation
+- Lifecycle
+- Network
+- Database
+- Performance
+- Exception
+- Crash
+- Accessibility
+- Custom
+
+Category assignment MUST be deterministic.
+
+---
+
+## Platform Source Mapping
+
+provider identifies the concrete acquisition mechanism. source_kind identifies the semantic class of the retained event. Implementations MUST NOT encode event classes such as exception, crash, or anr as provider values.
+
+### Android mapping
+
+| Source | Normalized category | Notes |
+| --- | --- | --- |
+| `get_logs` / `read_log_stream` | `Exception`, `Crash`, `Lifecycle`, `Network`, `Performance`, `Custom` | Primary Android diagnostic source. |
+| `get_network_activity` | `Network` | Network request evidence from platform logs. |
+| `ActionTrace` | `Lifecycle`, `Navigation`, `UI`, `Performance` | Used for correlation and action-level context. |
+| `capture_debug_snapshot.raw.ui_tree` / `capture_debug_snapshot.raw.fingerprint` / `get_ui_tree` | `UI`, `Navigation` | Used when they provide deterministic navigation or UI-state evidence. |
+
+### iOS mapping
+
+| Source | Normalized category | Notes |
+| --- | --- | --- |
+| `get_logs` / `read_log_stream` | `Exception`, `Crash`, `Lifecycle`, `Network`, `Performance`, `Custom` | Primary iOS diagnostic source via unified logging. |
+| `get_network_activity` | `Network` | Network request evidence from platform logs. |
+| `ActionTrace` | `Lifecycle`, `Navigation`, `UI`, `Performance` | Used for correlation and action-level context. |
+| `capture_debug_snapshot.raw.ui_tree` / `capture_debug_snapshot.raw.fingerprint` / `get_ui_tree` | `UI`, `Navigation` | Used when they provide deterministic navigation or UI-state evidence. |
+
+### Future work sources
+
+The following are not in scope for signal normalization in this spec:
+
+- app-private custom telemetry that is not surfaced through the existing tools
+- distributed tracing systems
+- debugger memory reads
+- arbitrary third-party observability providers
+
+---
+
+## Filtering
+
+Filtering is deterministic and MAY use:
+
+- application package
+- process
+- subsystem
+- severity
+- category
+- timestamp_epoch_ms
+- action identifier
+- trace identifier
+
+Filtering order MUST be:
+
+1. select eligible source records for the current request window
+2. normalize records into signals
+3. discard signals outside the requested filters
+4. collapse duplicates by `signal_id`
+5. rank the remaining signals
+
+---
+
+## Correlation
+
+Every retained signal MUST include:
+
+- `action_id`
+- `trace_id`
+- `timestamp_epoch_ms`
+- `provider`
+- `platform`
+
+Action window and collection window are distinct concepts.
+
+- The collection window is the request-scoped diagnostic capture interval defined by request_started_at_epoch_ms and collection_window_ms.
+- The action window is the execution interval of the ActionTrace identified by action_id.
+- Until ActionTrace exposes explicit started_at_epoch_ms and ended_at_epoch_ms fields, the action window MUST be derived from the matching trace's first and last recorded execution timestamps.
+- If the matching trace does not expose enough timestamps to derive an action window, correlation MUST fall back to the collection window and record normalized_payload.correlation_window_source as "collection_window_fallback".
+- When the action window is derived successfully, normalized_payload.correlation_window_source MUST be "action_trace".
+
+Correlation rules:
+
+- Signals that match an action trace MUST set `correlated: true`.
+- Signals that do not match an action trace MUST be excluded by default.
+- When uncorrelated signals are explicitly requested, they MUST be included after correlated signals and marked `correlated: false`.
+- If multiple traces could match a signal, the most recent trace whose action window encloses timestamp_epoch_ms wins.
+
+---
+
+## Relevance Ranking
+
+Signals MUST be ordered deterministically by descending relevance.
+
+### Scoring
+
+`relevance_score` MUST be computed as:
+
+`category_weight + severity_weight + correlation_weight + recency_weight + provider_weight`
+
+All weights are fixed integers.
+
+#### Category weights
+
+- Crash: `500`
+- Exception: `450`
+- Navigation: `380`
+- Network: `320`
+- Lifecycle: `260`
+- Performance: `200`
+- Database: `160`
+- UI: `120`
+- Accessibility: `80`
+- Custom: `40`
+
+#### Severity weights
+
+- FATAL: `200`
+- ERROR: `150`
+- WARN: `80`
+- INFO: `30`
+- DEBUG: `10`
+- VERBOSE: `0`
+
+#### Correlation weights
+
+- correlated to the originating action: `200`
+- same request window but no direct action match: `60`
+- uncorrelated: `0`
+
+#### Recency weights
+
+Recency is based on timestamp_epoch_ms within the current collection window.
+
+- newest signal in the window: `50`
+- oldest signal in the window: `0`
+- intermediate signals: linearly interpolated and floored to the nearest integer
+
+#### Provider weights
+
+- action_trace: 40
+- network_activity: 30
+- snapshot: 10
+- ui_tree: 10
+- current_screen: 10
+- screen_fingerprint: 10
+- log_stream: 5
+- logcat: 0
+- unified_logging: 0
+
+### Tie-breakers
+
+If two signals have the same `relevance_score`, they MUST be ordered by:
+
+1. category precedence
+2. severity, in the order `FATAL` > `ERROR` > `WARN` > `INFO` > `DEBUG` > `VERBOSE`
+3. timestamp_epoch_ms descending
+4. `signal_id` ascending, lexicographically
+
+### Category precedence
+
+Category precedence MUST be:
+
+1. Crash
+2. Exception
+3. Navigation
+4. Network
+5. Lifecycle
+6. Performance
+7. Database
+8. UI
+9. Accessibility
+10. Custom
+
+---
+
+## Diagnostic Contract
+
+The normalized diagnostic payload returned by `capture_debug_snapshot` MUST contain:
+
+- `collection_window`
+- `signals`
+- `errors`
+
+Each signal MUST expose the fields defined above.
+
+The implementation MAY include additional fields, but it MUST not rename or remove the required fields.
+
+---
+
+## Error Payloads
+
+The two error locations represent different failure scopes and are mutually exclusive for the same failure.
+
+- semantic.diagnostics.errors contains zero or more source-specific failures when capture_debug_snapshot succeeds overall and returns a snapshot. These are partial diagnostic failures and do not fail the tool invocation.
+- The top-level MCP error object is used only when capture_debug_snapshot cannot produce a valid snapshot response at all.
+- A source failure MUST NOT appear in both semantic.diagnostics.errors and the top-level MCP error object.
+- When at least one diagnostic source succeeds, capture_debug_snapshot SHOULD return the snapshot with successful signals plus any source failures in semantic.diagnostics.errors.
+- When no required snapshot data can be produced, capture_debug_snapshot MUST fail with the top-level MCP error object and MUST NOT return semantic.diagnostics.
+
+Diagnostic failures MUST use a deterministic error shape.
+
+### Source-specific error entry
+
+```json
+{
+  "code": "SIGNAL_TIMEOUT",
+  "message": "collection window expired before the source completed",
+  "details": {
+    "platform": "android",
+    "provider": "logcat",
+    "action_id": "tap_1710000000000_1",
+    "trace_id": "tap_1710000000000_1",
+    "collection_window_ms": 10000
+  }
+}
+```
+
+This object is one entry in semantic.diagnostics.errors. Top-level MCP errors continue to use the repository's existing tool-error envelope and are not redefined by this specification.
+
+### Required error codes
+
+- `SIGNAL_SOURCE_UNAVAILABLE`
+- `SIGNAL_TIMEOUT`
+- `SIGNAL_PARSE_FAILED`
+- `UNSUPPORTED_SIGNAL_SOURCE`
+
+### Error code semantics
+
+- `SIGNAL_SOURCE_UNAVAILABLE`: the requested source does not exist on the current device or cannot be read.
+- `SIGNAL_TIMEOUT`: the bounded collection window elapsed before the source returned usable data.
+- `SIGNAL_PARSE_FAILED`: the source returned data, but normalization failed.
+- `UNSUPPORTED_SIGNAL_SOURCE`: the source exists in the environment but is outside the scope of this specification.
+
+Each error object SHOULD include:
+
+- `code`
+- `message`
+- `details`
+
+`details` SHOULD include the provider, platform, and any applicable action or trace identifiers.
+
+---
+
+## Alignment With Current Tooling
+
+This spec maps directly onto existing outputs in the repository.
+
+| Existing tool/output | Normalized role in this spec |
+| --- | --- |
+| `get_logs` | source for log-derived diagnostic signals |
+| `read_log_stream` | incremental source for log-derived diagnostic signals |
+| `get_network_activity` | source for network diagnostic signals |
+| `ActionTrace` | correlation source for action-scoped signals |
+| `capture_debug_snapshot.raw.ui_tree` | context source for UI and navigation signals |
+| `capture_debug_snapshot.raw.fingerprint` | context source for navigation consistency |
+| `capture_debug_snapshot.raw.screenshot` | evidence only, not a retained signal by default |
+| `capture_debug_snapshot.raw.logs` | source for log-derived diagnostic signals |
+
+This mapping keeps the normalized model implementable from the repository's current observability surfaces without requiring a new low-level tool.
+
+---
+
+## Schema Synchronization
+
+The implementation is not complete unless all public and runtime contracts are updated in lockstep with this specification.
+
+The following artifacts MUST expose identical field names, enum values, required fields, optionality, and nullability:
+
+- capture_debug_snapshot input schema
+- capture_debug_snapshot output schema
+- MCP tool registration schema
+- exported TypeScript request and response types
+- runtime validation schemas
+- provider adapter output types
+- serialization and deserialization tests
+- backward-compatibility tests
+- public documentation and examples
+
+CI MUST fail when these contracts diverge.
+
+The deterministic signal_id generation algorithm defined by this specification MUST be verified by shared conformance tests. Independent implementations given identical normalized inputs MUST produce identical signal_id values. Any change to the generation algorithm requires an explicit specification revision because it is part of the public contract.
+
+---
+
+## Acceptance Criteria
+
+The implementation is complete when:
+
+- `capture_debug_snapshot` exposes the normalized diagnostic payload described here.
+- Android and iOS source outputs normalize into a common model.
+- Unrelated platform noise is excluded by default.
+- Signals are correlated with execution traces using `action_id`.
+- Relevant signals are ranked deterministically.
+- Diagnostic payloads are consistent across platforms.
+- Failure conditions return deterministic error codes and payloads.
+- The specification, tool schema, runtime validator, provider adapter types, and exported TypeScript types expose identical field names, enum values, required fields, optionality, and nullability.
+
+---
+
+## Dependencies
+
+Depends on:
+
+- Action Trace and Execution Observability
+- Environment Auto-Configuration and Toolchain Discovery
+
+Strengthens:
+
+- Runtime Debugger Introspection
+- Advanced Trace Correlation and Analysis
+
+---
+
+## Future Work
+
+Potential future enhancements include:
+
+- AI-assisted root cause analysis
+- Cross-session signal learning
+- Automatic issue clustering
+- Performance anomaly detection
+- Distributed trace integration

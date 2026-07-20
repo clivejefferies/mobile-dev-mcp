@@ -244,13 +244,16 @@ Failure Handling:
   },
   {
     name: 'capture_debug_snapshot',
-    description: 'Capture a complete debug snapshot (raw observation layer plus optional derived semantic layer). Returns structured JSON with snapshot_revision, captured_at_ms, snapshot_delta, and loading_state when detectable.',
+    description: 'Capture a complete debug snapshot (raw observation layer plus optional derived semantic layer). Returns structured JSON with snapshot_revision, captured_at_ms, snapshot_delta, loading_state, and semantic.diagnostics when detectable.',
     inputSchema: {
       type: 'object',
       properties: {
         reason: { type: 'string', description: 'Optional reason for snapshot' },
         includeLogs: { type: 'boolean', description: 'Whether to include logs', default: true },
         logLines: { type: 'number', description: 'Maximum number of log lines to include', default: 200 },
+        collection_window_ms: { type: 'number', description: 'Optional diagnostics window size in milliseconds', default: 10000 },
+        include_uncorrelated: { type: 'boolean', description: 'Include uncorrelated diagnostics when true', default: false },
+        action_id: { type: 'string', description: 'Optional action identifier to correlate diagnostics' },
         platform: { type: 'string', enum: ['android', 'ios'], description: 'Optional platform override' },
         appId: { type: 'string', description: 'Optional appId to scope logs (package/bundle id)' },
         deviceId: { type: 'string', description: 'Optional device serial/udid' },
